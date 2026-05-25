@@ -25,7 +25,6 @@ Go to the [Releases](../../releases) page and download the binary for your platf
 |----------|------|
 | Windows  | `ss14-redactor-win-x64.zip` → extract → run `ss14-redactor.exe` |
 | Linux    | `ss14-redactor-linux-x64.tar.gz` → extract → `./ss14-redactor` |
-| macOS (Intel) | `ss14-redactor-osx-x64.tar.gz` |
 | macOS (Apple Silicon) | `ss14-redactor-osx-arm64.tar.gz` |
 
 The binary is fully self-contained — no .NET runtime needed.
@@ -82,24 +81,24 @@ The web UI is embedded inside the binary as resources, so there are no external 
 
 ## Releases and GitHub Actions
 
-The [`.github/workflows/release.yml`](.github/workflows/release.yml) workflow builds and publishes a new release automatically when you push a version tag.
+The [`.github/workflows/release.yml`](.github/workflows/release.yml) workflow builds binaries for all supported platforms.
 
-### Creating a release
+### Creating a release (tag push)
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This triggers a 4-platform matrix build (win-x64, linux-x64, osx-x64, osx-arm64). When all builds pass, a GitHub Release is created automatically with the binaries attached. See [Workflow details](#workflow-details) below.
+This triggers a 3-platform matrix build (win-x64, linux-x64, osx-arm64). When all builds pass, a GitHub Release is created automatically with the binaries attached.
 
-### Manual build via Actions tab
+### Manual build via Actions tab (no release)
 
-You can also trigger the `workflow_dispatch` trigger manually:
-1. Go to **Actions → Release → Run workflow**
-2. Select the branch and click **Run workflow**
+Go to **Actions → Release → Run workflow** and click **Run workflow**.
 
-Manual triggers build all 4 platforms and upload the artifacts, but do **not** create a GitHub Release (no tag = no release). Use this to test that builds pass before tagging.
+This builds all 3 platforms and uploads the artifacts so you can download and test them — but does **not** create a GitHub Release. The `Create GitHub Release` step is intentionally skipped for manual runs because `github.ref` points to a branch, not a version tag.
+
+> **Summary:** Tag push → builds + Release. Manual dispatch → builds only (useful for CI checks before tagging).
 
 ---
 
