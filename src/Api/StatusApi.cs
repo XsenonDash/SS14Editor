@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Threading.Tasks;
@@ -102,5 +103,36 @@ internal sealed partial class ApiRouter
             prototypes = newCtx.ProtoIndex.TotalCount,
             typeCount = newCtx.ProtoIndex.TypeCount,
         });
+    }
+
+    /// <summary>
+    /// Opens a native folder-picker dialog on the user's machine and returns
+    /// the chosen path. Windows-only — uses PowerShell + WinForms so we don't
+    /// need to pull WinForms into the main project's TFM. The dialog runs in
+    /// a short-lived child process that prints exactly one line (the selected
+    /// path, or empty on cancel). Server-side endpoint only makes sense when
+    /// the editor is being used locally on the same machine that runs the
+    /// browser, which is the only supported topology.
+    /// </summary>
+    private async Task HandleBrowseFolderAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            await HttpJson.WriteErrorAsync(res, 501, "Native folder picker is only available on Windows.");
+            return;
+        }
+
+        string? selected;
+        try
+        {
+            selected = await Task.Run(() => ModernFolderPicker.Pick("Select your SS14 project folder"));
+        }
+        catch (Exception ex)
+        {
+            await HttpJson.WriteErrorAsync(res, 500, $"Failed to open folder picker: {ex.Message}");
+            return;
+        }
+
+        await HttpJson.WriteAsync(res, new { path = selected ?? string.Empty });
     }
 }

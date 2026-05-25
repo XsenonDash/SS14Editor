@@ -31,6 +31,14 @@ function resPathAutocomplete(input, opts = {}) {
     // the sound without committing the selection. Used by the SoundSpecifier
     // path picker so users can audition files before choosing.
     const previewAudio = !!opts.previewAudio;
+    // When set, file rows whose name ends in a recognised image extension
+    // get a small thumbnail (via /api/texture) prepended to the row.
+    const previewTexture = !!opts.previewTexture;
+    // When set, directory rows that are terminal AND look like `.rsi`
+    // packs get a tiny SpriteView preview of their first state prepended,
+    // so the user can pick by sight in the SpriteSpecifier picker.
+    const previewRsi = !!opts.previewRsi;
+    const TEXTURE_EXTS = ['.png', '.jpg', '.jpeg', '.svg', '.bmp'];
 
     const dd = _div('respath-dropdown');
     input.parentElement.style.position = 'relative';
@@ -50,9 +58,35 @@ function resPathAutocomplete(input, opts = {}) {
 
         for (const d of dirs) {
             const opt = _div('respath-item respath-dir');
-            opt.textContent = d + '/';
             opt.dataset.value = d + '/';
             opt.dataset.isDir = 'true';
+
+            const isTerminal = dirIsTerminal(d);
+            // Show an RSI thumbnail (first state's first frame) for `.rsi`
+            // packs in the SpriteSpecifier picker. We async-load the meta
+            // and SpriteView.create after the row is inserted so rendering
+            // doesn't block the dropdown.
+            if (previewRsi && isTerminal && d.toLowerCase().endsWith('.rsi')) {
+                const cur = input.value;
+                const lastSlash = cur.lastIndexOf('/');
+                const prefix = lastSlash >= 0 ? cur.substring(0, lastSlash + 1) : '';
+                const rsiFullPath = prefix + d;
+                const thumb = _div('respath-thumb respath-rsi-thumb');
+                opt.appendChild(thumb);
+                (async () => {
+                    try {
+                        const meta = await SpriteView.loadMeta(rsiFullPath);
+                        const first = meta?.states?.[0];
+                        if (first) SpriteView.create(thumb, rsiFullPath, first.name, { size: 20 });
+                    } catch { /* missing/bad rsi — leave empty */ }
+                })();
+            }
+
+            const nameSpan = _el('span');
+            nameSpan.className = 'respath-dir-name';
+            nameSpan.textContent = d + '/';
+            opt.appendChild(nameSpan);
+
             opt.addEventListener('mousedown', e => { e.preventDefault(); pick(opt); });
             dd.appendChild(opt);
             _items.push(opt);
@@ -67,6 +101,24 @@ function resPathAutocomplete(input, opts = {}) {
             const nameSpan = _el('span');
             nameSpan.className = 'respath-file-name';
             nameSpan.textContent = f;
+
+            // Optional thumbnail preview for image files (placed at the
+            // START of the row, before the name, so it lines up across
+            // entries regardless of name length).
+            if (previewTexture && TEXTURE_EXTS.some(ext => f.toLowerCase().endsWith(ext))) {
+                const cur = input.value;
+                const lastSlash = cur.lastIndexOf('/');
+                const prefix = lastSlash >= 0 ? cur.substring(0, lastSlash + 1) : '';
+                const fullPath = prefix + f;
+                const thumb = _el('img');
+                thumb.className = 'respath-thumb';
+                thumb.src = `/api/texture?path=${encodeURIComponent(fullPath)}`;
+                thumb.alt = '';
+                thumb.loading = 'lazy';
+                // Failed loads (e.g. unsupported format) collapse silently.
+                thumb.addEventListener('error', () => { thumb.style.visibility = 'hidden'; });
+                opt.appendChild(thumb);
+            }
 
             // Optional inline ▶ preview for .ogg files (placed at the START
             // of the row so it's reachable without scanning past long names).
@@ -335,6 +387,8 @@ function spriteSpecifierCtrl(val, dis, cb) {
         const IMG_EXTS = ['.png', '.jpg', '.jpeg', '.svg'];
         resPathAutocomplete(spriteInp, {
             hideFiles: false,
+            previewTexture: true,
+            previewRsi: true,
             filter: name => {
                 const lower = name.toLowerCase();
                 return IMG_EXTS.some(ext => lower.endsWith(ext));

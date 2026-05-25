@@ -35,25 +35,48 @@ function renderTabs() {
 }
 
 async function openFile(path) {
-    if (!state.openFiles.has(path)) {
-        try {
-            const resp = await api.loadFile(path);
-            const fs = new FileState(path, resp.content);
-            fs.yaml = parseYaml(resp.content);
-            fs.readOnly = !!resp.readOnly || path.startsWith('__engine__/');
-            state.openFiles.set(path, fs);
-            try {
-                const stamps = await api.fileStamps([path]);
-                if (stamps[path]) state.fileStamps.set(path, stamps[path]);
-            } catch {}
-        } catch (e) {
-            console.error('[Tabs] Open file failed:', path, e);
-            toast(`Open failed: ${e.message}`, 'error');
-            return;
-        }
+    if (state.openFiles.has(path)) {
+        state.currentFile = path;
+        renderTabs(); renderEditor();
+        return;
     }
+
+    // Insert a placeholder FileState so the tab + a spinner appear instantly;
+    // large files (parsing, preloadParents) can otherwise stall the UI for
+    // several seconds with no feedback.
+    const placeholder = new FileState(path, '');
+    placeholder.loading = true;
+    placeholder.yaml = [];
+    state.openFiles.set(path, placeholder);
     state.currentFile = path;
     renderTabs(); renderEditor();
+
+    try {
+        const resp = await api.loadFile(path);
+        if (!state.openFiles.has(path) || state.openFiles.get(path) !== placeholder) return;
+        placeholder.content    = resp.content;
+        placeholder.history    = [resp.content];
+        placeholder.historyIdx = 0;
+        placeholder.yaml       = parseYaml(resp.content);
+        placeholder.readOnly   = !!resp.readOnly || path.startsWith('__engine__/');
+        placeholder.loading    = false;
+        try {
+            const stamps = await api.fileStamps([path]);
+            if (stamps[path]) state.fileStamps.set(path, stamps[path]);
+        } catch {}
+        if (state.currentFile === path) { renderTabs(); renderEditor(); }
+    } catch (e) {
+        console.error('[Tabs] Open file failed:', path, e);
+        toast(`Open failed: ${e.message}`, 'error');
+        if (state.openFiles.get(path) === placeholder) {
+            state.openFiles.delete(path);
+            if (state.currentFile === path) {
+                const k = [...state.openFiles.keys()];
+                state.currentFile = k.length ? k[k.length - 1] : null;
+            }
+            renderTabs(); renderEditor();
+        }
+    }
 }
 
 function switchTab(path) { if (!state.openFiles.has(path)) return; state.currentFile = path; renderTabs(); renderEditor(); }

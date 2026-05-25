@@ -20,6 +20,7 @@ internal sealed partial class ApiRouter
     {
         "/api/status",
         "/api/configure",
+        "/api/browse-folder",
     };
 
     public ApiRouter(RedactorContext? initialCtx)
@@ -30,6 +31,7 @@ internal sealed partial class ApiRouter
             // Status / setup (StatusApi.cs)
             ["/api/status"] = HandleStatusAsync,
             ["/api/configure"] = HandleConfigureAsync,
+            ["/api/browse-folder"] = HandleBrowseFolderAsync,
 
             // Tree + prototype index (TreeApi.cs)
             ["/api/tree"] = HandleTreeAsync,

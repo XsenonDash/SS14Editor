@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -14,6 +15,11 @@ internal static class HttpJson
     private static readonly JsonSerializerOptions s_options = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        // Default encoder escapes apostrophes, non-ASCII letters etc. as \uXXXX.
+        // Our responses are always served back to our own JS over fetch+JSON.parse,
+        // so html-safety isn't needed; readable raw bodies are more useful when
+        // an error message falls back to "raw text" rendering on the client.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     public static async Task WriteAsync(HttpListenerResponse res, object data)

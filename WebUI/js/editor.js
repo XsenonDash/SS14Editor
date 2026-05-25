@@ -30,6 +30,10 @@ function renderEditor() {
     }
     const fs = state.openFiles.get(state.currentFile);
     if (!fs) return;
+    if (fs.loading) {
+        area.innerHTML = `<div class="editor-loading"><div class="editor-spinner"></div><div class="editor-loading-label">Loading ${esc(state.currentFile.split('/').pop())}\u2026</div></div>`;
+        return;
+    }
     const protos = fs.yaml;
     if (!Array.isArray(protos) || protos.length === 0) {
         area.innerHTML = '<div class="empty-state"><p>No prototypes found in this file.</p></div>';

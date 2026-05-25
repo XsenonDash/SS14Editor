@@ -150,7 +150,13 @@ function renderHistoryList(input, tryOpen) {
 
         const text = document.createElement('span');
         text.className = 'setup-history-path';
-        text.textContent = path;
+        // <bdi> isolates the LTR path content inside the rtl-direction
+        // parent so that text-overflow:ellipsis clips at the START of the
+        // string (showing the differentiating tail of long shared-prefix
+        // paths) while the path itself still reads left-to-right.
+        const bdi = document.createElement('bdi');
+        bdi.textContent = path;
+        text.appendChild(bdi);
         text.title = path;
         text.addEventListener('click', () => {
             input.value = path;
@@ -179,41 +185,77 @@ function showSetupOverlay() {
 
     const statusEl = document.getElementById('setup-status');
     const btn = document.getElementById('setup-open-btn');
+    const browseBtn = document.getElementById('setup-browse-btn');
     const input = document.getElementById('setup-path');
 
     // Pre-fill with most recent path
     const h = loadHistory();
     if (h.length > 0) input.value = h[0].path;
 
+    function setStatusLoading(msg) {
+        statusEl.className = 'setup-status loading';
+        statusEl.innerHTML = '';
+        const spin = document.createElement('span');
+        spin.className = 'setup-spinner';
+        const txt = document.createElement('span');
+        txt.textContent = msg;
+        statusEl.appendChild(spin);
+        statusEl.appendChild(txt);
+    }
+    function setStatusError(msg) {
+        statusEl.className = 'setup-status error';
+        statusEl.textContent = msg;
+    }
+    function clearStatus() {
+        statusEl.className = 'setup-status';
+        statusEl.textContent = '';
+    }
+
     async function tryOpen() {
         const path = input.value.trim();
         if (!path) return;
 
         btn.disabled = true;
-        statusEl.textContent = 'Checking project and extracting metadata…';
-        statusEl.className = 'setup-status info';
+        if (browseBtn) browseBtn.disabled = true;
+        setStatusLoading('Checking project and extracting metadata…');
 
         try {
             const result = await api.configure(path);
             if (result.success) {
                 addToHistory(path);
                 overlay.style.display = 'none';
+                clearStatus();
                 toast(`Project opened: ${result.prototypes} prototypes (${result.typeCount} types)`, 'success');
                 await loadEditorData();
             } else {
-                statusEl.textContent = result.error || 'Unknown error';
-                statusEl.className = 'setup-status error';
+                setStatusError(result.error || 'Unknown error');
             }
         } catch (e) {
-            statusEl.textContent = e.message;
-            statusEl.className = 'setup-status error';
+            setStatusError(e.message);
         } finally {
             btn.disabled = false;
+            if (browseBtn) browseBtn.disabled = false;
+        }
+    }
+
+    async function browseForFolder() {
+        try {
+            browseBtn.disabled = true;
+            const { path } = await api.browseFolder();
+            if (path) {
+                input.value = path;
+                input.focus();
+            }
+        } catch (e) {
+            setStatusError(e.message);
+        } finally {
+            browseBtn.disabled = false;
         }
     }
 
     renderHistoryList(input, tryOpen);
     btn.addEventListener('click', tryOpen);
+    if (browseBtn) browseBtn.addEventListener('click', browseForFolder);
     input.addEventListener('keydown', e => { if (e.key === 'Enter') tryOpen(); });
     input.focus();
 }

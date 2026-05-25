@@ -4,13 +4,25 @@
 
 'use strict';
 
+// Try to pull a human-readable `.error` string out of an error response body.
+// Server endpoints reply with `{"error": "..."}` for 4xx/5xx; we don't want
+// the raw JSON (with its `\uXXXX` escapes) bleeding into UI toasts.
+function _extractErrorMessage(body) {
+    if (!body) return '';
+    try {
+        const j = JSON.parse(body);
+        if (j && typeof j.error === 'string') return j.error;
+    } catch { /* not JSON */ }
+    return body;
+}
+
 const api = {
     async get(u) {
         const r = await fetch(u);
         if (!r.ok) {
             const text = await r.text().catch(() => r.statusText);
             console.error(`[API] GET ${u} → ${r.status}`, text);
-            throw new Error(`${r.status}: ${text}`);
+            throw new Error(`${r.status}: ${_extractErrorMessage(text)}`);
         }
         return r.json();
     },
@@ -19,7 +31,7 @@ const api = {
         if (!r.ok) {
             const text = await r.text().catch(() => r.statusText);
             console.error(`[API] POST ${u} → ${r.status}`, text);
-            throw new Error(`${r.status}: ${text}`);
+            throw new Error(`${r.status}: ${_extractErrorMessage(text)}`);
         }
         return r.json();
     },
@@ -43,4 +55,5 @@ const api = {
     renameProtoId(path, oldId, newId, type) { return this.post('/api/rename-proto-id', { path, oldId, newId, type }); },
     status()          { return this.get('/api/status'); },
     configure(projectPath) { return this.post('/api/configure', { projectPath }); },
+    browseFolder()    { return this.get('/api/browse-folder'); },
 };

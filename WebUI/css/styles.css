@@ -516,11 +516,17 @@ body {
     font-family: var(--font-mono); transition: background .1s;
 }
 .respath-item:hover, .respath-item.selected { background: var(--accent-dim); }
-.respath-dir  { color: var(--text-link); }
-.respath-dir::before  { content: '📁 '; }
+.respath-dir  { color: var(--text-link); display: flex; align-items: center; gap: 6px; }
+.respath-dir-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.respath-dir-name::before { content: '📁 '; }
+/* When a dir has an RSI thumbnail, suppress the generic folder emoji so the
+   sprite preview becomes the visual identifier. */
+.respath-dir:has(.respath-rsi-thumb) .respath-dir-name::before { content: ''; }
 .respath-file::before { content: '📄 '; }
 .respath-file { display: flex; align-items: center; gap: 6px; }
 .respath-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* When a file has an image thumbnail, suppress the generic file emoji. */
+.respath-file:has(.respath-thumb)::before { content: ''; }
 .respath-play-btn {
     flex-shrink: 0; background: transparent; border: 1px solid var(--border-subtle);
     color: var(--text); font-size: 10px; line-height: 1;
@@ -528,6 +534,11 @@ body {
     transition: background .1s;
 }
 .respath-play-btn:hover { background: var(--accent-dim); }
+.respath-thumb {
+    flex-shrink: 0; width: 20px; height: 20px;
+    object-fit: contain; image-rendering: pixelated;
+    background: var(--bg-tertiary); border-radius: 2px;
+}
 
 /* ======================== Search Dropdown =============== */
 .search-dropdown { position: relative; }
@@ -1482,6 +1493,13 @@ body {
 .setup-history-path {
     flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
+    /* Long repo paths usually share a common prefix (e.g. C:\repos\github\…)
+       and differ only in the last segment. Setting direction:rtl on the
+       container makes text-overflow:ellipsis clip the START of the line
+       (because in RTL the line "starts" on the right and overflow happens
+       on the left). The path text itself is wrapped in <bdi> at the JS
+       layer to keep its natural left-to-right reading order. */
+    direction: rtl;
 }
 .setup-history-item:hover .setup-history-path { color: var(--text); }
 .setup-history-remove {
@@ -1491,3 +1509,56 @@ body {
     transition: color .12s, background .12s; flex-shrink: 0;
 }
 .setup-history-remove:hover { background: var(--error); color: #fff; }
+
+/* ======================== Setup Overlay Spinner ======================= */
+.setup-btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+.setup-btn-secondary:hover:not(:disabled) {
+    background: var(--bg-surface-hover, var(--bg-surface));
+    color: var(--text);
+    border-color: var(--accent);
+}
+.setup-btn-icon {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 0;
+    width: 34px; height: 34px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 16px; line-height: 1;
+}
+.setup-btn-icon:hover:not(:disabled) {
+    background: var(--bg-surface-hover, var(--bg-surface));
+    color: var(--text);
+    border-color: var(--accent);
+}
+.setup-status.loading {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-tertiary); color: var(--text-secondary);
+}
+.setup-spinner {
+    width: 14px; height: 14px; flex-shrink: 0;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: setup-spin .8s linear infinite;
+}
+@keyframes setup-spin { to { transform: rotate(360deg); } }
+
+/* ======================== Editor Loading Placeholder ================== */
+.editor-loading {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 60px 20px;
+    color: var(--text-secondary);
+}
+.editor-spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: setup-spin .8s linear infinite;
+}
+.editor-loading-label { font-size: 13px; font-family: var(--font-mono); }
