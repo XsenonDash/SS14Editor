@@ -181,7 +181,7 @@ public sealed class FieldExtractor
         return false;
     }
 
-    public static (string kind, string[]? enumValues, string? protoTypeArg) ClassifyType(Type type)
+    public (string kind, string[]? enumValues, string? protoTypeArg) ClassifyType(Type type)
     {
         var name = type.Name;
 
@@ -230,11 +230,13 @@ public sealed class FieldExtractor
     /// <summary>
     /// True when <paramref name="type"/> itself or any of its ancestors is
     /// annotated with <c>[DataDefinition]</c> or
-    /// <c>[ImplicitDataDefinitionForInheritors]</c>. Lets the editor treat
-    /// abstract polymorphic bases (e.g. <c>CEEntityEffect</c>) as object
-    /// kinds instead of falling back to plain text.
+    /// <c>[ImplicitDataDefinitionForInheritors]</c>, OR when the type is
+    /// already registered in <c>_dataDefinitions</c> (the discovery pass
+    /// registers content-defined interfaces such as <c>IWireAction</c> that
+    /// carry no DataDefinition attribute themselves but act as <c>!type:</c>
+    /// polymorphic bases for at least one concrete implementor).
     /// </summary>
-    private static bool HasDataDefinitionAttributeChain(Type type)
+    private bool HasDataDefinitionAttributeChain(Type type)
     {
         var t = type;
         while (t != null && t.FullName != "System.Object")
@@ -244,6 +246,8 @@ public sealed class FieldExtractor
                 return true;
             t = t.BaseType;
         }
+        if (type.FullName != null && _dataDefinitions.ContainsKey(type.FullName))
+            return true;
         return false;
     }
 

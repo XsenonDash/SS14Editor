@@ -70,9 +70,18 @@ public static class MetadataExtractor
         var components = new Dictionary<string, ComponentMetadata>();
         // baseFullName -> [concreteFullName,...] for polymorphic !type: picking.
         var polymorphicTypes = new Dictionary<string, List<string>>();
+        // Pass-1 captures Type handles so pass-2 can extract fields once
+        // the entire DD/interface registry is fully populated. Without this
+        // two-pass split, a field declared as a content interface (e.g.
+        // IWireAction) that hasn't yet been seen as an implementor would be
+        // mis-classified as plain text.
+        var dataDefTypes = new Dictionary<string, Type>();
+        var protoTypes  = new Dictionary<string, Type>();
+        var compTypes   = new Dictionary<string, Type>();
         var skippedAssemblies = 0;
         var skippedTypes = 0;
 
+        // === PASS 1: Discovery ============================================
         // Scan unique DLLs from all bin directories (avoid scanning the same DLL twice)
         var scannedDlls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var dir in binDirs)
@@ -85,7 +94,9 @@ public static class MetadataExtractor
                 try
                 {
                     var assembly = mlc.LoadFromAssemblyPath(dllPath);
-                    ScanAssembly(assembly, prototypes, components, dataDefinitions, polymorphicTypes, fieldExtractor, xmlDocs, ref skippedTypes);
+                    DiscoverAssembly(assembly, prototypes, components, dataDefinitions,
+                        polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs,
+                        ref skippedTypes);
                 }
                 catch (Exception ex)
                 {
@@ -93,6 +104,29 @@ public static class MetadataExtractor
                     Logger.Warn($"Could not load assembly {fileName}: {ex.Message}");
                 }
             }
+        }
+
+        // === PASS 2: Field extraction =====================================
+        // dataDefinitions/polymorphicTypes are now fully populated, so
+        // FieldExtractor can correctly classify interface-typed fields
+        // (e.g. `IWireAction Action`) as `kind: object` polymorphic refs.
+        foreach (var (full, t) in dataDefTypes)
+        {
+            if (!dataDefinitions.TryGetValue(full, out var dd) || dd.Fields.Count > 0) continue;
+            try { dd.Fields = fieldExtractor.ExtractDataFields(t); }
+            catch (Exception ex) { Logger.Warn($"Field extraction failed for {full}: {ex.Message}"); }
+        }
+        foreach (var (yt, t) in protoTypes)
+        {
+            if (!prototypes.TryGetValue(yt, out var p) || p.Fields.Count > 0) continue;
+            try { p.Fields = fieldExtractor.ExtractDataFields(t); }
+            catch (Exception ex) { Logger.Warn($"Field extraction failed for prototype {yt}: {ex.Message}"); }
+        }
+        foreach (var (cn, t) in compTypes)
+        {
+            if (!components.TryGetValue(cn, out var c) || c.Fields.Count > 0) continue;
+            try { c.Fields = fieldExtractor.ExtractDataFields(t); }
+            catch (Exception ex) { Logger.Warn($"Field extraction failed for component {cn}: {ex.Message}"); }
         }
 
         var metadata = new MetadataRoot
@@ -122,13 +156,15 @@ public static class MetadataExtractor
         Logger.Info($"Metadata written to: {outputPath}");
     }
 
-    private static void ScanAssembly(
+    private static void DiscoverAssembly(
         Assembly assembly,
         Dictionary<string, PrototypeMetadata> prototypes,
         Dictionary<string, ComponentMetadata> components,
         Dictionary<string, DataDefinitionMetadata> dataDefinitions,
         Dictionary<string, List<string>> polymorphicTypes,
-        FieldExtractor fieldExtractor,
+        Dictionary<string, Type> dataDefTypes,
+        Dictionary<string, Type> protoTypes,
+        Dictionary<string, Type> compTypes,
         XmlDocReader xmlDocs,
         ref int skippedTypes)
     {
@@ -147,7 +183,8 @@ public static class MetadataExtractor
         {
             try
             {
-                ScanType(type, prototypes, components, dataDefinitions, polymorphicTypes, fieldExtractor, xmlDocs);
+                DiscoverType(type, prototypes, components, dataDefinitions,
+                    polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs);
             }
             catch (Exception ex)
             {
@@ -157,13 +194,31 @@ public static class MetadataExtractor
         }
     }
 
-    private static void ScanType(
+    /// <summary>
+    /// True for interfaces declared in non-system assemblies. Such
+    /// interfaces are eligible to act as <c>!type:</c> polymorphic bases
+    /// even when they carry no <c>[ImplicitDataDefinitionForInheritors]</c>
+    /// attribute (e.g. <c>IWireAction</c>), as long as at least one
+    /// concrete DataDefinition implementor is discovered.
+    /// </summary>
+    private static bool IsContentAssembly(Assembly asm)
+    {
+        var n = asm.GetName().Name ?? "";
+        if (n.Length == 0) return false;
+        if (n == "mscorlib" || n == "netstandard" || n == "System") return false;
+        if (n.StartsWith("System.") || n.StartsWith("Microsoft.")) return false;
+        return true;
+    }
+
+    private static void DiscoverType(
         Type type,
         Dictionary<string, PrototypeMetadata> prototypes,
         Dictionary<string, ComponentMetadata> components,
         Dictionary<string, DataDefinitionMetadata> dataDefinitions,
         Dictionary<string, List<string>> polymorphicTypes,
-        FieldExtractor fieldExtractor,
+        Dictionary<string, Type> dataDefTypes,
+        Dictionary<string, Type> protoTypes,
+        Dictionary<string, Type> compTypes,
         XmlDocReader xmlDocs)
     {
         // Scan DataDefinition types (BOTH abstract bases and concrete
@@ -203,16 +258,15 @@ public static class MetadataExtractor
             var fullName = type.FullName ?? type.Name;
             if (!dataDefinitions.ContainsKey(fullName))
             {
-                var fields = fieldExtractor.ExtractDataFields(type);
-                // Abstract bases may have zero declared fields – keep them
-                // anyway so we know the polymorphic key exists.
+                // Stub entry; pass 2 fills Fields once the registry is complete.
                 dataDefinitions[fullName] = new DataDefinitionMetadata
                 {
                     ClassName = fullName,
                     ShortName = type.Name,
                     Summary = xmlDocs.GetTypeSummary(type),
-                    Fields = fields,
+                    Fields = new List<FieldMetadata>(),
                 };
+                dataDefTypes[fullName] = type;
             }
 
             // Walk base chain – if any ancestor is also a DataDefinition,
@@ -239,12 +293,17 @@ public static class MetadataExtractor
                     baseT = baseT.BaseType;
                 }
 
+                // Walk ALL implemented interfaces from content/engine assemblies.
+                // We deliberately do NOT require [ImplicitDataDefinitionForInheritors]
+                // on the interface itself – many polymorphic contract interfaces in
+                // SS14 (e.g. IWireAction) carry no attribute but are intended as
+                // !type: bases via their concrete [DataDefinition] implementors.
+                // System/Microsoft interfaces are filtered out by IsContentAssembly
+                // so junk markers like IComparable/IDisposable don't pollute the
+                // polymorphic registry.
                 foreach (var iface in type.GetInterfaces())
                 {
-                    var ifaceHasDD = iface.CustomAttributes
-                        .Any(a => a.AttributeType.Name is "DataDefinitionAttribute"
-                            or "ImplicitDataDefinitionForInheritorsAttribute");
-                    if (!ifaceHasDD) continue;
+                    if (!IsContentAssembly(iface.Assembly)) continue;
                     var ifaceFull = iface.FullName ?? iface.Name;
                     if (!polymorphicTypes.TryGetValue(ifaceFull, out var impls))
                         polymorphicTypes[ifaceFull] = impls = new List<string>();
@@ -259,6 +318,7 @@ public static class MetadataExtractor
                             Summary = xmlDocs.GetTypeSummary(iface),
                             Fields = new List<FieldMetadata>(),
                         };
+                        // Interfaces declare no fields themselves; no Type capture needed.
                     }
                 }
             }
@@ -272,16 +332,18 @@ public static class MetadataExtractor
         {
             var yamlType = InferPrototypeYamlType(protoAttr, type);
             var inheriting = type.GetInterfaces().Any(i => i.Name == "IInheritingPrototype");
-            var fields = fieldExtractor.ExtractDataFields(type);
 
-            prototypes.TryAdd(yamlType, new PrototypeMetadata
+            if (prototypes.TryAdd(yamlType, new PrototypeMetadata
             {
                 ClassName = type.FullName ?? type.Name,
                 YamlType = yamlType,
                 Inheriting = inheriting,
                 Summary = xmlDocs.GetTypeSummary(type),
-                Fields = fields,
-            });
+                Fields = new List<FieldMetadata>(),
+            }))
+            {
+                protoTypes[yamlType] = type;
+            }
         }
 
         // Scan Component types
@@ -291,15 +353,17 @@ public static class MetadataExtractor
         if (compAttr != null)
         {
             var compName = InferComponentName(type);
-            var fields = fieldExtractor.ExtractDataFields(type);
 
-            components.TryAdd(compName, new ComponentMetadata
+            if (components.TryAdd(compName, new ComponentMetadata
             {
                 ClassName = type.FullName ?? type.Name,
                 Name = compName,
                 Summary = xmlDocs.GetTypeSummary(type),
-                Fields = fields,
-            });
+                Fields = new List<FieldMetadata>(),
+            }))
+            {
+                compTypes[compName] = type;
+            }
         }
     }
 

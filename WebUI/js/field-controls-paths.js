@@ -324,13 +324,21 @@ function spriteSpecifierCtrl(val, dis, cb) {
 
     spriteInp.addEventListener('change', () => { emit(); loadStates(); });
 
-    // Attach ResPath autocomplete to sprite input — directories only, and
-    // any `.rsi` directory is treated as a terminal selection so the user
-    // doesn't get dropped inside it (which would just show png files we
-    // don't want listed here).
+    // Attach ResPath autocomplete to sprite input. The picker lists:
+    //   * directories – navigate into them (except `.rsi` which is a
+    //     terminal selection so the editor doesn't drop the user inside
+    //     and force them to manually back out);
+    //   * non-RSI image files (.png / .jpg / .jpeg / .svg) – picked as a
+    //     single-line texture path (cb emits a bare string, which the
+    //     engine accepts as a SpriteSpecifier.Texture).
     if (!dis) {
+        const IMG_EXTS = ['.png', '.jpg', '.jpeg', '.svg'];
         resPathAutocomplete(spriteInp, {
-            hideFiles: true,
+            hideFiles: false,
+            filter: name => {
+                const lower = name.toLowerCase();
+                return IMG_EXTS.some(ext => lower.endsWith(ext));
+            },
             dirIsTerminal: name => name.endsWith('.rsi'),
             onPick(v) { spriteInp.value = v; emit(); loadStates(); },
         });
