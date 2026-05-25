@@ -377,6 +377,22 @@ function dataDefCtrl(val, ddType, dis, onChange) {
         const currentFn = effectiveType !== ddType ? effectiveType : null;
         btn.textContent = currentFn ? currentFn.split('.').pop() : '(base)';
         btn.title = currentFn || '(base — no !type: tag)';
+        btn.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            const items = [];
+            // Concrete type when picked, otherwise fall back to the
+            // declared base — both are real C# types SourceLocator can find.
+            const target = currentFn || ddType;
+            if (target) {
+                const short = target.split('.').pop();
+                items.push({
+                    label: `Open .cs source of "${short}"`,
+                    action: () => api.openSource(target),
+                });
+            }
+            if (items.length) showContextMenu(e.clientX, e.clientY, items);
+        });
         btn.addEventListener('click', e => {
             e.stopPropagation();
             showSearchableTypePicker(btn, impls, currentFn, chosenFn => {

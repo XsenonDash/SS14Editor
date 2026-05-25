@@ -332,6 +332,8 @@ function buildCard(proto, idx) {
     // The handle is the only draggable surface so that text-selection in
     // inputs still works normally. Drop targets are the sibling cards.
     card.dataset.protoIdx = String(idx);
+    card.dataset.protoId = String(id);
+    card.dataset.protoType = String(type);
     const dragHandle = hdr.querySelector('.proto-drag-handle');
     dragHandle.addEventListener('dragstart', e => {
         e.dataTransfer.effectAllowed = 'move';

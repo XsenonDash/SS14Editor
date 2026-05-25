@@ -5,17 +5,34 @@
 'use strict';
 
 /** Ctrl+click helper: find proto by type+id in the index and open its file. */
-function navigateToProto(type, id) {
+async function navigateToProto(type, id) {
     if (!id || !state.protoIndex) return;
     // type may not always match — scan all types
     const types = type ? [type] : Object.keys(state.protoIndex);
+    let entry = null;
     for (const t of types) {
         const entries = state.protoIndex[t];
         if (!entries) continue;
-        const entry = entries.find(e => e.id === id);
-        if (entry?.file) { openFile(entry.file); return; }
+        const hit = entries.find(e => e.id === id);
+        if (hit?.file) { entry = hit; break; }
     }
-    toast('Prototype not found in index');
+    if (!entry) { toast('Prototype not found in index'); return; }
+
+    const wasOpen = state.openFiles.has(entry.file);
+    await openFile(entry.file);
+    // If the file was already open, openFile's early-return path skips the
+    // re-render; switch to it and trigger one so the card is in the DOM.
+    if (wasOpen) { state.currentFile = entry.file; renderTabs(); renderEditor(); }
+
+    // Wait one frame so the editor area is laid out before we measure.
+    await new Promise(r => requestAnimationFrame(r));
+    const card = document.querySelector(`.proto-card[data-proto-id="${CSS.escape(id)}"]`);
+    if (!card) { toast('Prototype card not in view'); return; }
+    card.classList.remove('collapsed');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('proto-card-flash');
+    void card.offsetWidth; // restart animation
+    card.classList.add('proto-card-flash');
 }
 
 /**

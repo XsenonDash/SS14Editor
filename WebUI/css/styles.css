@@ -1227,6 +1227,15 @@ body {
 .datadef-type-btn::before { content: '!type:'; color: var(--yaml-key); margin-right: 2px; }
 .datadef-type-btn:hover { background: var(--bg-card); border-color: var(--border-subtle); }
 
+/* Flash a prototype card when navigated to from "Go to YAML source". */
+@keyframes proto-card-flash {
+    0%   { box-shadow: 0 0 0 2px var(--accent); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+.proto-card.proto-card-flash {
+    animation: proto-card-flash 1.4s ease-out 1;
+}
+
 /* ── 7.  Components section → YAML "components:" key + indent ──────── */
 .components-section {
     margin-top: 6px;
