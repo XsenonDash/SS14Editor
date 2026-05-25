@@ -37,15 +37,16 @@ public class CtorDefaultsScannerTests
     }
 
     [Fact]
-    public void Skips_BoolFalse_Default()
+    public void Scans_BoolFalse_Default()
     {
-        // Roslyn omits stfld when the initializer matches default(T),
-        // so this field never appears in the recovered map. The editor
-        // will just keep its existing `#` placeholder for these.
+        // Modern Roslyn (.NET 10) emits ldc.i4.0 + stfld even when the
+        // initializer equals default(T). The scanner records the value;
+        // strictly more useful for the editor than a missing key.
         var s = LoadScanner();
         var map = s.GetDefaultsFor(FixtureType);
         Assert.NotNull(map);
-        Assert.False(map!.ContainsKey("BoolFalseDefault"));
+        Assert.True(map!.ContainsKey("BoolFalseDefault"));
+        Assert.Equal(0, map["BoolFalseDefault"]);
     }
 
     [Fact]
@@ -58,11 +59,12 @@ public class CtorDefaultsScannerTests
     }
 
     [Fact]
-    public void Skips_IntZero_Default()
+    public void Scans_IntZero_Default()
     {
         var s = LoadScanner();
         var map = s.GetDefaultsFor(FixtureType)!;
-        Assert.False(map.ContainsKey("IntZeroDefault"));
+        Assert.True(map.ContainsKey("IntZeroDefault"));
+        Assert.Equal(0, map["IntZeroDefault"]);
     }
 
     [Fact]
@@ -84,22 +86,24 @@ public class CtorDefaultsScannerTests
     }
 
     [Fact]
-    public void Skips_StringNull_Default()
+    public void Scans_StringNull_Default()
     {
         var s = LoadScanner();
         var map = s.GetDefaultsFor(FixtureType)!;
-        Assert.False(map.ContainsKey("StrNullDefault"));
+        Assert.True(map.ContainsKey("StrNullDefault"));
+        Assert.Null(map["StrNullDefault"]);
     }
 
     [Fact]
-    public void Skips_EnumMember_When_Underlying_Is_Zero()
+    public void Scans_EnumMember_With_Zero_Underlying()
     {
-        // FixtureMood.Happy == 0, which Roslyn folds to ldc.i4.0 AND then
-        // omits the stfld because the field's default(T) is already 0.
-        // So enum-with-value-0 defaults are not recoverable from IL alone.
+        // FixtureMood.Happy == 0. Modern Roslyn emits ldc.i4.0 + stfld;
+        // the scanner records the int 0, which round-trips back to the
+        // zero enum member at editor display time.
         var s = LoadScanner();
         var map = s.GetDefaultsFor(FixtureType)!;
-        Assert.False(map.ContainsKey("MoodHappy"));
+        Assert.True(map.ContainsKey("MoodHappy"));
+        Assert.Equal(0, map["MoodHappy"]);
     }
 
     [Fact]
