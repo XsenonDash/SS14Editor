@@ -45,7 +45,7 @@ internal sealed class FileWatcherService : IDisposable
             Schedule(e.FullPath, FileChangeKind.Created);
         };
         _watcher.Error += (_, e) =>
-            Console.Error.WriteLine($"[Redactor] FileWatcher error: {e.GetException().Message}");
+            Logger.Error($"FileWatcher error: {e.GetException().Message}");
     }
 
     public void Start() => _watcher.EnableRaisingEvents = true;
@@ -107,7 +107,7 @@ internal sealed class FileWatcherService : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Redactor] FileWatcher listener error: {ex.Message}");
+            Logger.Error($"FileWatcher listener error: {ex.Message}");
         }
     }
 

@@ -29,9 +29,9 @@ public static class RedactorServer
         if (solutionRoot != null)
         {
             initialCtx = BuildContext(solutionRoot);
-            Console.WriteLine("[Redactor] Building prototype index...");
+            Logger.Info("Building prototype index...");
             initialCtx.ProtoIndex.Rebuild();
-            Console.WriteLine($"[Redactor] Indexed {initialCtx.ProtoIndex.TotalCount} prototypes across {initialCtx.ProtoIndex.TypeCount} types");
+            Logger.Info($"Indexed {initialCtx.ProtoIndex.TotalCount} prototypes across {initialCtx.ProtoIndex.TypeCount} types");
 
             initialCtx.FileWatcher.Changed += evt =>
             {
@@ -53,7 +53,7 @@ public static class RedactorServer
         }
         else
         {
-            Console.WriteLine("[Redactor] No project configured. Open the editor in your browser to select a project.");
+            Logger.Info("No project configured. Open the editor in your browser to select a project.");
         }
 
         var router = new ApiRouter(initialCtx);
@@ -62,8 +62,8 @@ public static class RedactorServer
         listener.Prefixes.Add($"http://localhost:{port}/");
         listener.Start();
 
-        Console.WriteLine($"[Redactor] Editor running at http://localhost:{port}/");
-        Console.WriteLine("[Redactor] Press Ctrl+C to stop.");
+        Logger.Info($"Editor running at http://localhost:{port}/");
+        Logger.Info("Press Ctrl+C to stop.");
 
         TryOpenBrowser($"http://localhost:{port}/");
 
@@ -107,13 +107,13 @@ public static class RedactorServer
         var req = httpCtx.Request;
         var res = httpCtx.Response;
 
-        res.AddHeader("Access-Control-Allow-Origin", "*");
-        res.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        res.AddHeader("Access-Control-Allow-Headers", "Content-Type");
-
+        // No CORS headers: the WebUI is served by this same listener (same
+        // origin), so cross-origin requests are not legitimate. Allowing them
+        // with "Access-Control-Allow-Origin: *" would let any website the user
+        // visits hit our /api/file POST and rewrite their prototype files.
         if (req.HttpMethod == "OPTIONS")
         {
-            res.StatusCode = 200;
+            res.StatusCode = 405;
             res.Close();
             return;
         }
@@ -124,7 +124,7 @@ public static class RedactorServer
             var path = req.Url?.AbsolutePath ?? "/";
             if (path.StartsWith("/api/"))
             {
-                Console.WriteLine($"[Redactor] {req.HttpMethod} {path}");
+                Logger.Info($"{req.HttpMethod} {path}");
                 keepAlive = await router.DispatchAsync(path, req, res);
             }
             else
@@ -134,7 +134,7 @@ public static class RedactorServer
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Redactor] ERROR handling {req.HttpMethod} {req.Url}: {ex}");
+            Logger.Error($"handling {req.HttpMethod} {req.Url}", ex);
             res.StatusCode = 500;
             res.ContentType = "application/json";
             await HttpJson.WriteAsync(res, new { error = ex.Message });

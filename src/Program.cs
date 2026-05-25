@@ -13,7 +13,7 @@ public static class Program
         // the browser opens a project-picker page instead of the editor.
         if (args.Length == 0)
         {
-            await RedactorServer.StartAsync(solutionRoot: null, port: 5555);
+            await RedactorServer.StartAsync(solutionRoot: null, port: 2701);
             return;
         }
 
@@ -33,7 +33,7 @@ public static class Program
                 var serveRoot = args.Length > 1 ? args[1] : FindSolutionRoot();
                 // serveRoot == null is intentional: the server starts in "setup mode"
                 // and lets the user pick a project folder in the browser.
-                var port = args.Length > 2 ? int.Parse(args[2]) : 5555;
+                var port = args.Length > 2 ? int.Parse(args[2]) : 2701;
 
                 if (serveRoot != null)
                     EnsureMetadataFresh(serveRoot);
@@ -53,7 +53,7 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  ss14-redactor extract [solutionRoot]  - Extract prototype metadata to Redactor/metadata.json");
-        Console.WriteLine("  ss14-redactor serve [solutionRoot] [port] - Start the visual editor (default port: 5555)");
+        Console.WriteLine("  ss14-redactor serve [solutionRoot] [port] - Start the visual editor (default port: 2701)");
         Console.WriteLine();
         Console.WriteLine("When run without arguments the editor starts and lets you pick the project folder in the browser.");
     }
@@ -128,13 +128,13 @@ public static class Program
 
             if (newest > metaTime)
             {
-                Console.WriteLine("[Redactor] metadata.json out of date — regenerating...");
+                Logger.Info("metadata.json out of date — regenerating...");
                 MetadataExtractor.Extract(solutionRoot);
             }
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[Redactor] EnsureMetadataFresh failed: {ex.Message}");
+            Logger.Error($"EnsureMetadataFresh failed: {ex.Message}");
         }
     }
 }

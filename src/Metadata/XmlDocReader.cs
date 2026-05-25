@@ -40,7 +40,7 @@ public sealed class XmlDocReader
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[Redactor] Warning: Could not parse XML doc {Path.GetFileName(xmlPath)}: {ex.Message}");
+                Logger.Warn($"Could not parse XML doc {Path.GetFileName(xmlPath)}: {ex.Message}");
             }
         }
     }

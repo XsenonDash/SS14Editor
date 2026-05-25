@@ -31,17 +31,17 @@ public static class MetadataExtractor
 
         if (binDirs.Count == 0)
         {
-            Console.Error.WriteLine($"[Redactor] ERROR: No bin directories found.");
-            Console.Error.WriteLine("[Redactor] Build Content.Server and Content.Client first (dotnet build).");
+            Logger.Error("No bin directories found.");
+            Logger.Error("Build Content.Server and Content.Client first (dotnet build).");
             return;
         }
 
-        Console.WriteLine($"[Redactor] Scanning {binDirs.Count} bin directories: {string.Join(", ", binDirs.Select(Path.GetFileName))}");
-        Console.WriteLine("[Redactor] Extracting prototype metadata...");
+        Logger.Info($"Scanning {binDirs.Count} bin directories: {string.Join(", ", binDirs.Select(Path.GetFileName))}");
+        Logger.Info("Extracting prototype metadata...");
 
         var runtimeDlls = FindRuntimeDlls();
         if (runtimeDlls.Length == 0)
-            Console.Error.WriteLine("[Redactor] WARNING: Could not locate BCL assemblies. Metadata extraction may fail.");
+            Logger.Warn("Could not locate BCL assemblies. Metadata extraction may fail.");
 
         // Collect DLLs from all bin directories, dedup by filename (server takes precedence for shared DLLs)
         var pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -59,9 +59,9 @@ public static class MetadataExtractor
         foreach (var dir in binDirs)
             xmlDocs.LoadFromDirectory(dir);
         if (xmlDocs.Count > 0)
-            Console.WriteLine($"[Redactor] Loaded {xmlDocs.Count} XML doc entries");
+            Logger.Info($"Loaded {xmlDocs.Count} XML doc entries");
         else
-            Console.WriteLine("[Redactor] No XML documentation files found (summaries will be empty).");
+            Logger.Info("No XML documentation files found (summaries will be empty).");
 
         var dataDefinitions = new Dictionary<string, DataDefinitionMetadata>();
         var fieldExtractor = new FieldExtractor(xmlDocs, dataDefinitions);
@@ -90,7 +90,7 @@ public static class MetadataExtractor
                 catch (Exception ex)
                 {
                     skippedAssemblies++;
-                    Console.Error.WriteLine($"[Redactor] Warning: Could not load assembly {fileName}: {ex.Message}");
+                    Logger.Warn($"Could not load assembly {fileName}: {ex.Message}");
                 }
             }
         }
@@ -114,12 +114,12 @@ public static class MetadataExtractor
         var outputPath = Path.Combine(outputDir, "metadata.json");
         File.WriteAllText(outputPath, json);
 
-        Console.WriteLine($"[Redactor] Extracted {prototypes.Count} prototypes, {components.Count} components, {dataDefinitions.Count} data definitions");
+        Logger.Info($"Extracted {prototypes.Count} prototypes, {components.Count} components, {dataDefinitions.Count} data definitions");
         if (skippedAssemblies > 0)
-            Console.WriteLine($"[Redactor] Skipped {skippedAssemblies} unloadable assemblies (native libs, etc.)");
+            Logger.Info($"Skipped {skippedAssemblies} unloadable assemblies (native libs, etc.)");
         if (skippedTypes > 0)
-            Console.WriteLine($"[Redactor] Skipped {skippedTypes} problematic types");
-        Console.WriteLine($"[Redactor] Metadata written to: {outputPath}");
+            Logger.Info($"Skipped {skippedTypes} problematic types");
+        Logger.Info($"Metadata written to: {outputPath}");
     }
 
     private static void ScanAssembly(
@@ -140,7 +140,7 @@ public static class MetadataExtractor
         catch (ReflectionTypeLoadException ex)
         {
             types = ex.Types.Where(t => t != null).ToArray()!;
-            Console.Error.WriteLine($"[Redactor] Warning: Partial type load for {assembly.GetName().Name} ({types.Length} types loaded)");
+            Logger.Warn($"Partial type load for {assembly.GetName().Name} ({types.Length} types loaded)");
         }
 
         foreach (var type in types)
@@ -152,7 +152,7 @@ public static class MetadataExtractor
             catch (Exception ex)
             {
                 skippedTypes++;
-                Console.Error.WriteLine($"[Redactor] Warning: Could not scan type {type.FullName}: {ex.Message}");
+                Logger.Warn($"Could not scan type {type.FullName}: {ex.Message}");
             }
         }
     }

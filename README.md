@@ -50,7 +50,7 @@ Requires [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0).
    ```
 
 2. **Run the redactor** (binary or `dotnet run` from this repo).  
-   Your browser opens automatically at `http://localhost:5555`.
+   Your browser opens automatically at `http://localhost:2701`.
 
 3. **Pick a project folder** in the setup screen that appears.  
    Enter the absolute path to your SS14 fork root (e.g. `C:\repos\space-station-14`).  
