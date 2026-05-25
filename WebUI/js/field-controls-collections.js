@@ -371,7 +371,6 @@ function dataDefCtrl(val, ddType, dis, onChange) {
     const impls = state.metadata?.polymorphicTypes?.[ddType] || [];
     if (impls.length > 0 && !dis) {
         const row = _div('datadef-type-row');
-        const lbl = _el('label'); lbl.className = 'datadef-type-label'; lbl.textContent = '!type:';
         const btn = _el('button');
         btn.type = 'button';
         btn.className = 'datadef-type-btn';
@@ -401,7 +400,7 @@ function dataDefCtrl(val, ddType, dis, onChange) {
                 onChange(next);
             }, true);
         });
-        row.append(lbl, btn);
+        row.appendChild(btn);
         w.appendChild(row);
     }
 

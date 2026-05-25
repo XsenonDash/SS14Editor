@@ -188,6 +188,11 @@ public static class MetadataExtractor
                     return true;
                 b = b.BaseType;
             }
+            foreach (var iface in t.GetInterfaces())
+            {
+                if (iface.CustomAttributes.Any(a => a.AttributeType.Name == "ImplicitDataDefinitionForInheritorsAttribute"))
+                    return true;
+            }
             return false;
         }
 
@@ -232,6 +237,29 @@ public static class MetadataExtractor
                             impls.Add(fullName);
                     }
                     baseT = baseT.BaseType;
+                }
+
+                foreach (var iface in type.GetInterfaces())
+                {
+                    var ifaceHasDD = iface.CustomAttributes
+                        .Any(a => a.AttributeType.Name is "DataDefinitionAttribute"
+                            or "ImplicitDataDefinitionForInheritorsAttribute");
+                    if (!ifaceHasDD) continue;
+                    var ifaceFull = iface.FullName ?? iface.Name;
+                    if (!polymorphicTypes.TryGetValue(ifaceFull, out var impls))
+                        polymorphicTypes[ifaceFull] = impls = new List<string>();
+                    if (!impls.Contains(fullName))
+                        impls.Add(fullName);
+                    if (!dataDefinitions.ContainsKey(ifaceFull))
+                    {
+                        dataDefinitions[ifaceFull] = new DataDefinitionMetadata
+                        {
+                            ClassName = ifaceFull,
+                            ShortName = iface.Name,
+                            Summary = xmlDocs.GetTypeSummary(iface),
+                            Fields = new List<FieldMetadata>(),
+                        };
+                    }
                 }
             }
         }

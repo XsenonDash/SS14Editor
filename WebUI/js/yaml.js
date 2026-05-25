@@ -112,5 +112,9 @@ function dumpYaml(data) {
 function _fixupTypeTags(yamlText) {
     return yamlText
         .replace(/!<!type:([^>]+)>/g, '!type:$1')
-        .replace(/!<([A-Za-z_][A-Za-z0-9_.]*)>/g, '!type:$1');
+        .replace(/!<([A-Za-z_][A-Za-z0-9_.]*)>/g, '!type:$1')
+        // js-yaml occasionally emits a trailing space between the verbatim
+        // tag and the line break; strip it so output is `!type:Foo\n`
+        // and not `!type:Foo \n`.
+        .replace(/(!type:[A-Za-z_][A-Za-z0-9_.]*)[ \t]+(\r?\n|$)/g, '$1$2');
 }

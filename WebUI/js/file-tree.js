@@ -82,8 +82,9 @@ function buildTreeDom(nodes, parent, depth) {
             el.addEventListener('contextmenu', e => {
                 e.preventDefault(); e.stopPropagation();
                 const items = [{ label: 'Open', action: () => openFile(n.path) }];
+                items.push({ label: 'Open with Default Editor', action: () => api.openDefault(n.path) });
+                items.push({ label: 'Open in Explorer', action: () => api.openInExplorer(n.path) });
                 if (!n.readOnly) {
-                    items.push({ label: 'Open in Explorer', action: () => api.openInExplorer(n.path) });
                     items.push('---');
                     items.push({ label: 'New File…', action: () => promptCreateFile(n.path.includes('/') ? n.path.substring(0, n.path.lastIndexOf('/')) : '') });
                     items.push('---');

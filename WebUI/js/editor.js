@@ -131,16 +131,18 @@ function buildCard(proto, idx) {
     const id   = proto.id   || '(no id)';
     const meta = state.metadata?.prototypes?.[type];
     const inheriting = meta?.inheriting ?? false;
+    const hasAbstractField = !!meta?.fields?.some(f => f.isAbstract);
     const isAbstract = !!proto.abstract;
 
     // Apply abstract styling
     if (isAbstract) card.classList.add('proto-abstract');
 
     // Multi-line header rendered as YAML lines. The header stays visible
-    // during collapse, so id/abstract live here as pseudo field-rows.
+    // during collapse, so id (and abstract when supported) live here as
+    // pseudo field-rows.
     //   Line 1:  - type: foo                        (+ delete button on hover)
     //   Line 2:  id: my-proto-id                    (always visible)
-    //   Line 3:  abstract: true                     (always visible, toggle)
+    //   Line 3:  abstract: true                     (only when meta declares an abstract field)
     // The parent-bar (see below) is appended next, also part of the sticky header.
     const hdr = _div('proto-header');
     hdr.innerHTML = `<div class="proto-type-line">
@@ -152,35 +154,30 @@ function buildCard(proto, idx) {
             <div class="field-control-wrap">
                 <span class="proto-id-text" title="Double-click to rename ID">${esc(String(id))}</span>
             </div>
-        </div>
-        <div class="field-row ${isAbstract ? 'field-local' : 'inherited'} proto-abstract-row">
-            <label class="field-label">abstract</label>
-            <div class="field-control-wrap">
-                <div class="field-control">
-                    <span class="abstract-label toggle-label">${isAbstract ? 'true' : 'false'}</span>
-                    <label class="toggle-switch" title="Abstract prototype – serves only as a template for children, never spawned at runtime">
-                        <input type="checkbox" class="abstract-cb" ${isAbstract ? 'checked' : ''}>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
         </div>`;
 
-    // Abstract checkbox
-    const absCb = hdr.querySelector('.abstract-cb');
-    absCb.addEventListener('change', e => {
-        e.stopPropagation();
-        const fs = state.openFiles.get(state.currentFile);
-        if (!fs || !fs.yaml[idx]) return;
-        if (absCb.checked) {
-            fs.yaml[idx].abstract = true;
-        } else {
-            delete fs.yaml[idx].abstract;
-        }
-        state.resolvedCache.clear();
-        commitChange(fs);
-        renderEditor();
-    });
+    // Abstract row — only rendered for proto types whose metadata actually
+    // declares an abstract field. Built via the standard bool fieldRow so
+    // spacing and styling match every other bool field in the editor.
+    if (hasAbstractField) {
+        const absSource = isAbstract ? 'local' : 'default';
+        const absMeta = { fieldKind: 'boolean', tag: 'abstract' };
+        const onAbsChange = checked => {
+            const fs = state.openFiles.get(state.currentFile);
+            if (!fs || !fs.yaml[idx]) return;
+            if (checked) fs.yaml[idx].abstract = true;
+            else delete fs.yaml[idx].abstract;
+            state.resolvedCache.clear();
+            commitChange(fs);
+            renderEditor();
+        };
+        const onAbsReset = absSource === 'local'
+            ? () => { deleteField([idx], 'abstract'); }
+            : null;
+        const absRow = fieldRow('abstract', absMeta, isAbstract, absSource, onAbsChange, onAbsReset);
+        absRow.classList.add('proto-abstract-row');
+        hdr.appendChild(absRow);
+    }
 
     // ID rename on double-click
     const idSpan = hdr.querySelector('.proto-id-text');
@@ -415,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ======================== COMPONENTS SECTION ============================
 function buildComponentsSection(proto, protoIdx, inherited) {
     const sec = _div('components-section');
-    sec.innerHTML = `<div class="components-header"><span>Components</span><button class="add-component-btn" title="Add component">+</button></div>`;
+    sec.innerHTML = `<div class="components-header"><span>components</span><button class="add-component-btn" title="Add component">+</button></div>`;
     sec.querySelector('.add-component-btn').addEventListener('click', () => showAddComponentModal(proto, protoIdx));
 
     const localComps = proto.components || [];

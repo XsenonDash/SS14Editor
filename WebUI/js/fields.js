@@ -49,7 +49,7 @@ function fieldRow(key, meta, value, source, onChange, onReset) {
     }
     const tipParts = [];
     if (meta.summary) tipParts.push(meta.summary);
-    tipParts.push(`Type: ${meta.fullType || meta.type || meta.fieldKind || 'unknown'}`);
+    tipParts.push(`type: ${prettyTypeName(meta.fullType || meta.type || meta.fieldKind || 'unknown')}`);
     if (!isLocal && source === 'inherited') tipParts.push('(inherited from parent)');
     if (!isLocal && source === 'default') tipParts.push('(default value)');
     lbl.title = tipParts.join('\n');
@@ -261,17 +261,31 @@ function textCtrl(val, dis, cb) {
 
 function colorCtrl(val, dis, cb) {
     const w = _div('field-control color-control');
-    const cp = _el('input'); cp.type = 'color'; cp.className = 'color-picker';
-    cp.value = typeof val === 'string' && val.startsWith('#') ? val.slice(0, 7) : '#ffffff'; cp.disabled = dis;
     const tx = _el('input'); tx.type = 'text'; tx.className = 'field-input color-text';
     tx.value = typeof val === 'string' ? val : ''; tx.disabled = dis;
+    const cp = _el('input'); cp.type = 'color'; cp.className = 'color-picker'; cp.disabled = dis;
+
+    function parseHex(s) {
+        if (typeof s !== 'string') return '#ffffff';
+        const t = s.trim();
+        const m8 = /^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/.exec(t);
+        if (m8) return '#' + m8[1].toLowerCase();
+        const m6 = /^#([0-9a-fA-F]{6})$/.exec(t);
+        if (m6) return '#' + m6[1].toLowerCase();
+        const m3 = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(t);
+        if (m3) return '#' + m3[1]+m3[1] + m3[2]+m3[2] + m3[3]+m3[3];
+        return '#ffffff';
+    }
+    cp.value = parseHex(tx.value);
+
     cp.addEventListener('input', () => { tx.value = cp.value; });
-    cp.addEventListener('change', () => cb(cp.value));
-    tx.addEventListener('change', () => { try { cp.value = tx.value; } catch {} cb(tx.value); });
-    // YAML look: text value first, picker swatch after — keeps the textual
-    // hex token in line with other scalar inputs; the swatch is a tiny
-    // accessory on the right.
-    w.append(tx, cp); return w;
+    cp.addEventListener('change', () => { tx.value = cp.value; cb(tx.value); });
+    tx.addEventListener('change', () => {
+        cp.value = parseHex(tx.value);
+        cb(tx.value);
+    });
+    w.append(tx, cp);
+    return w;
 }
 
 function enumCtrl(val, opts, dis, cb) {
