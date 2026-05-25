@@ -493,12 +493,27 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited) {
     // wrote them in this YAML, or they carry overrides on top of an inherited
     // base) start expanded so the changes are immediately visible.
     const startCollapsed = isInh;
+    // A local component that ALSO exists in the inherited chain is an
+    // override – the `×` action effectively *resets* it to the inherited
+    // value rather than truly deleting it. Surface that distinction in
+    // the icon/tooltip so the design matches plain field rows (↺ for
+    // override-reset, × for outright remove).
+    const isOverride = !isInh && Array.isArray(inherited?.components)
+        && inherited.components.some(c => c && c.type === compType);
     const card = _div('component-card' + (startCollapsed ? ' collapsed' : '') + (isInh ? ' inherited' : ' comp-local'));
     const cMeta = state.metadata?.components?.[compType];
     const hdr = _div('component-header');
     hdr.innerHTML = `<span class="component-type" title="${esc(cMeta?.summary || '')}">${esc(compType)}</span>`;
     if (!isInh && compIdx >= 0) {
-        const rmBtn = _el('button'); rmBtn.className = 'field-reset-btn'; rmBtn.title = 'Remove component'; rmBtn.textContent = '×';
+        const rmBtn = _el('button');
+        rmBtn.className = 'field-reset-btn';
+        if (isOverride) {
+            rmBtn.title = 'Reset to inherited value';
+            rmBtn.textContent = '↺';
+        } else {
+            rmBtn.title = 'Remove component';
+            rmBtn.textContent = '×';
+        }
         rmBtn.addEventListener('click', e => {
             e.stopPropagation();
             const fs = state.openFiles.get(state.currentFile);
@@ -518,7 +533,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited) {
         const items = [];
         if (cMeta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(cMeta.className) });
         if (!isInh && compIdx >= 0) {
-            items.push('---', { label: 'Remove component', danger: true, action: () => {
+            items.push('---', { label: isOverride ? 'Reset to inherited' : 'Remove component', danger: !isOverride, action: () => {
                 const fs = state.openFiles.get(state.currentFile);
                 if (fs && fs.yaml[protoIdx]?.components) {
                     fs.yaml[protoIdx].components.splice(compIdx, 1);

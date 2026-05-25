@@ -406,7 +406,7 @@ function searchDropdown(val, searchType, dis, cb) {
         if (inp.value) {
             e.preventDefault();
             showContextMenu(e.clientX, e.clientY, [
-                { label: `Open "${inp.value}" in editor`, action: () => navigateToProto(searchType, inp.value) },
+                { label: `Go to YAML source of "${inp.value}"`, action: () => navigateToProto(searchType, inp.value) },
             ]);
         }
     });

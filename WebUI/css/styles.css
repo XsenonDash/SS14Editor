@@ -232,8 +232,9 @@ body {
 }
 .field-row:last-child { border-bottom: none; }
 
-/* Inherited (non-local) fields – differentiated by opacity only */
-.field-row.inherited { opacity: .55; }
+/* Inherited (non-local) fields – the row stays fully opaque (so any
+   absolutely-positioned dropdowns/popups inside it remain clickable);
+   dimming is applied to the label only by the later rule. */
 .field-row.inherited .field-label::after {
     content: ' ↑'; font-size: 9px; color: var(--text-muted);
     font-style: normal; letter-spacing: .3px;
@@ -903,13 +904,31 @@ body {
     color: var(--yaml-punct);
     font-weight: 400;
 }
+/* Inherited / default rows: dim the LABEL and the *primary* value
+   elements only. CSS `opacity` cascades to every descendant (including
+   absolutely-positioned dropdown popups, which would then become invisible
+   and unclickable), so we cannot apply it to the row or to the
+   `.field-control` wrapper. Instead we list the direct value elements
+   explicitly – everything that lives inside a popup (dropdown items,
+   searchable pickers, type pickers, …) is unaffected. */
 .field-row.inherited {
-    opacity: 0.5;
+    opacity: 1;
     color: inherit;
 }
-.field-row.inherited .field-label {
+.field-row.inherited > .field-label {
     color: var(--yaml-key);
     font-style: normal;
+    opacity: 0.55;
+}
+.field-row.inherited > .field-control-wrap > .field-default-placeholder,
+.field-row.inherited > .field-control-wrap > .field-control > .field-input,
+.field-row.inherited > .field-control-wrap > .field-control > .field-select,
+.field-row.inherited > .field-control-wrap > .field-control > .field-textarea,
+.field-row.inherited > .field-control-wrap > .field-control > .toggle-switch,
+.field-row.inherited > .field-control-wrap > .field-control > .toggle-label,
+.field-row.inherited > .field-control-wrap > .field-control > .flags-toggle,
+.field-row.inherited > .field-control-wrap > .field-control > button {
+    opacity: 0.55;
 }
 .field-row.inherited .field-label::after {
     content: ': ';

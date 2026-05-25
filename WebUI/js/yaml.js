@@ -21,7 +21,20 @@ const _TagType = new jsyaml.Type('!type:', {
     represent(obj) { const out = {}; for (const k of Object.keys(obj)) if (k !== '__yamlTag') out[k] = obj[k]; return out; },
     representName(obj) { return obj.__yamlTag; },
 });
-const SCHEMA = jsyaml.DEFAULT_SCHEMA.extend([_TagType]);
+// Parameterless polymorphic items appear as a bare tag with no body
+// (e.g. `- !type:ActiveHandFreePrecondition`). js-yaml resolves that node
+// as a scalar, so the mapping Type above is skipped and the __yamlTag is
+// lost. Register a scalar variant of the same tag prefix so the marker
+// survives the round-trip; the value becomes an object with ONLY
+// __yamlTag set, which dataDefCtrl handles natively.
+const _TagTypeScalar = new jsyaml.Type('!type:', {
+    kind: 'scalar', multi: true,
+    construct(data, type) {
+        const tag = typeof type === 'string' ? type.replace(/^!type:/, '') : type;
+        return { __yamlTag: tag };
+    },
+});
+const SCHEMA = jsyaml.DEFAULT_SCHEMA.extend([_TagType, _TagTypeScalar]);
 
 function parseYaml(text) {
     try { return jsyaml.load(text, { schema: SCHEMA }) || []; }
@@ -116,5 +129,9 @@ function _fixupTypeTags(yamlText) {
         // js-yaml occasionally emits a trailing space between the verbatim
         // tag and the line break; strip it so output is `!type:Foo\n`
         // and not `!type:Foo \n`.
-        .replace(/(!type:[A-Za-z_][A-Za-z0-9_.]*)[ \t]+(\r?\n|$)/g, '$1$2');
+        .replace(/(!type:[A-Za-z_][A-Za-z0-9_.]*)[ \t]+(\r?\n|$)/g, '$1$2')
+        // Parameterless polymorphic items round-trip as an empty mapping
+        // (`!type:Foo {}`); collapse them back to the bare scalar form the
+        // SS14 serializer (and the original source files) use.
+        .replace(/(!type:[A-Za-z_][A-Za-z0-9_.]*)[ \t]+\{\s*\}(\s*(?:\r?\n|$))/g, '$1$2');
 }

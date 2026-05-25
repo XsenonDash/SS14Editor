@@ -409,7 +409,11 @@ function dataDefCtrl(val, ddType, dis, onChange) {
         // fall back to a raw-YAML stub for the body so power users aren't
         // locked out.
         if (impls.length === 0) return autoControl(val, dis, onChange);
-        w.appendChild(unsupportedStub(effectiveType, obj, onChange));
+        // Polymorphic abstract base with a concrete type selected: the
+        // type-selector button rendered above is the entire UI for a
+        // parameterless `- !type:Foo` (e.g. ActiveHandFreePrecondition).
+        // Don't emit a misleading yellow "unsupported" stub – the value
+        // is fine, the concrete type just has no editable fields.
         return w;
     }
 
