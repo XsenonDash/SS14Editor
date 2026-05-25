@@ -89,11 +89,19 @@ function showAddProtoModal() {
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
     // ── Step 1: pick prototype type ──────────────────────────────────
+    // List = union of metadata-declared types and types actually present in
+    // YAML. The two can diverge when the C# class name doesn't follow the
+    // FooPrototype → "foo" convention; using the union ensures the user can
+    // always pick a type that has clonable instances on disk.
     function showStepType() {
+        modal.querySelector('h3').textContent = 'Add Prototype';
         body.innerHTML = `<input type="text" class="field-input modal-search" placeholder="Search prototype type\u2026" autocomplete="off"><div class="modal-list"></div>`;
         const searchInp = body.querySelector('.modal-search');
         const listEl = body.querySelector('.modal-list');
-        const types = state.metadata?.prototypes ? Object.keys(state.metadata.prototypes).sort() : [];
+        const typeSet = new Set();
+        if (state.metadata?.prototypes) for (const k of Object.keys(state.metadata.prototypes)) typeSet.add(k);
+        if (state.protoIndex) for (const k of Object.keys(state.protoIndex)) typeSet.add(k);
+        const types = [...typeSet].sort();
         function renderList(q) {
             listEl.innerHTML = '';
             const filtered = types.filter(t => smartMatch(t, q));
@@ -108,21 +116,29 @@ function showAddProtoModal() {
         renderList('');
         searchInp.addEventListener('input', () => renderList(searchInp.value));
         searchInp.focus();
-        modal.querySelector('h3').textContent = 'Add Prototype';
     }
 
     // ── Step 2: empty vs copy-from-existing ──────────────────────────
+    // Copy is disabled when the picked type has no instances on disk —
+    // there's nothing to clone from. Case-insensitive lookup so a
+    // metadata-derived key that doesn't exactly match the YAML literal
+    // still resolves (matches the server-side Search fallback).
     function showStepMode(type) {
         modal.querySelector('h3').textContent = `Add ${type}`;
+        const resolved = findProtoEntries(type);
+        const canCopy = resolved.entries.length > 0;
+        const copyHint = canCopy
+            ? `Pick an existing ${esc(resolved.key)} and clone all its fields.`
+            : `No existing <code>${esc(type)}</code> prototypes on disk to clone from.`;
         body.innerHTML = `
             <div class="add-proto-mode-row">
                 <button class="add-proto-mode-btn" data-mode="empty">
                     <div class="add-proto-mode-title">Empty prototype</div>
                     <div class="add-proto-mode-hint">Start from a fresh ${esc(type)} with only <code>id</code> set.</div>
                 </button>
-                <button class="add-proto-mode-btn" data-mode="copy">
+                <button class="add-proto-mode-btn" data-mode="copy"${canCopy ? '' : ' disabled'}>
                     <div class="add-proto-mode-title">Copy from existing</div>
-                    <div class="add-proto-mode-hint">Pick an existing ${esc(type)} and clone all its fields.</div>
+                    <div class="add-proto-mode-hint">${copyHint}</div>
                 </button>
             </div>
             <div class="modal-back-row"><button class="modal-back-btn">\u2190 Back</button></div>`;
@@ -130,7 +146,9 @@ function showAddProtoModal() {
             overlay.remove();
             addNewPrototype(type);
         });
-        body.querySelector('[data-mode="copy"]').addEventListener('click', () => showStepCopy(type));
+        if (canCopy) {
+            body.querySelector('[data-mode="copy"]').addEventListener('click', () => showStepCopy(resolved.key));
+        }
         body.querySelector('.modal-back-btn').addEventListener('click', showStepType);
     }
 
@@ -172,6 +190,22 @@ function showAddProtoModal() {
     }
 
     showStepType();
+}
+
+/**
+ * Find proto-index entries for a given type with a case-insensitive
+ * fallback. Returns `{ key, entries }` where `key` is the actual index
+ * key that matched (so callers can pass it on to /api/search-protos) and
+ * `entries` is the matching array (empty when nothing matches).
+ */
+function findProtoEntries(type) {
+    const idx = state.protoIndex || {};
+    if (idx[type]?.length) return { key: type, entries: idx[type] };
+    const lc = String(type).toLowerCase();
+    for (const k of Object.keys(idx)) {
+        if (k.toLowerCase() === lc) return { key: k, entries: idx[k] };
+    }
+    return { key: type, entries: [] };
 }
 
 /**

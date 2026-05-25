@@ -59,7 +59,21 @@ internal sealed class ProtoIndexService
     public List<ProtoSearchResult> Search(string type, string query, int limit)
     {
         if (!_index.TryGetValue(type, out var entries))
-            return new();
+        {
+            // Case-insensitive fallback. Caller-provided `type` is normally
+            // derived from C# metadata (FooPrototype → "foo"), the index is
+            // keyed by the literal YAML `type:` value. The two should agree
+            // when the FooPrototype naming convention holds, but not every
+            // engine prototype follows it (e.g. ContentTileDefinition → "tile",
+            // or custom forks). Falling back here avoids empty dropdowns.
+            string? alt = null;
+            foreach (var k in _index.Keys)
+            {
+                if (string.Equals(k, type, StringComparison.OrdinalIgnoreCase)) { alt = k; break; }
+            }
+            if (alt == null) return new();
+            entries = _index[alt];
+        }
 
         if (string.IsNullOrWhiteSpace(query))
             return entries.Take(limit).Select(e => new ProtoSearchResult { Id = e.Id, Name = e.Name }).ToList();

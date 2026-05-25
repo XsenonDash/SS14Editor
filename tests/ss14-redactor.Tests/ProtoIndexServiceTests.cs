@@ -128,6 +128,21 @@ public class ProtoIndexServiceTests
     }
 
     [Fact]
+    public void Search_CaseInsensitiveTypeFallback()
+    {
+        using var tmp = new TempDir();
+        tmp.Write("a.yml", "- type: playTimeTracker\n  id: Overall\n");
+        var svc = BuildService(tmp);
+        svc.Rebuild();
+
+        // Exact match still works.
+        Assert.Single(svc.Search("playTimeTracker", "", 10));
+        // And mismatched casing from a metadata-derived key resolves.
+        Assert.Single(svc.Search("PlayTimeTracker", "", 10));
+        Assert.Single(svc.Search("playtimetracker", "", 10));
+    }
+
+    [Fact]
     public void RefreshFile_RemovesOldEntriesAndAddsNew()
     {
         using var tmp = new TempDir();

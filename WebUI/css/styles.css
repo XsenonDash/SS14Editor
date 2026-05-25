@@ -897,6 +897,8 @@ body {
     transition: background .12s, border-color .12s;
 }
 .add-proto-mode-btn:hover { background: var(--bg-surface-hover); border-color: var(--accent); }
+.add-proto-mode-btn[disabled] { opacity: .5; cursor: not-allowed; }
+.add-proto-mode-btn[disabled]:hover { background: var(--bg-surface); border-color: var(--border); }
 .add-proto-mode-title { font-weight: 600; margin-bottom: 4px; }
 .add-proto-mode-hint { font-size: 12px; color: var(--text-secondary); }
 .modal-back-row { padding-top: 10px; }
