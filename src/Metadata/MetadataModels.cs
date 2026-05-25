@@ -59,31 +59,14 @@ public sealed class FieldMetadata
     public string? ProtoTypeArg { get; set; }
     public string[]? EnumValues { get; set; }
 
-    // List element info
-    public string? ElementKind { get; set; }
-    public string? ElementFullType { get; set; }
-    public string? ElementProtoTypeArg { get; set; }
-    public string[]? ElementEnumValues { get; set; }
-
-    // Map key/value info
-    public string? KeyKind { get; set; }
-    public string? KeyFullType { get; set; }
-    public string? KeyProtoTypeArg { get; set; }
-    public string[]? KeyEnumValues { get; set; }
-    public string? ValueKind { get; set; }
-    public string? ValueFullType { get; set; }
-    public string? ValueProtoTypeArg { get; set; }
-    public string[]? ValueEnumValues { get; set; }
-
-    // Nested element info for one level of inner generics
-    // (e.g. Dictionary<K, List<V>> -> ValueElement* describes V;
-    //  List<List<V>> -> ElementElement* describes V).
-    public string? ValueElementKind { get; set; }
-    public string? ValueElementFullType { get; set; }
-    public string? ValueElementProtoTypeArg { get; set; }
-    public string? ElementElementKind { get; set; }
-    public string? ElementElementFullType { get; set; }
-    public string? ElementElementProtoTypeArg { get; set; }
+    // Recursive type tree for collection elements / dict key+value.
+    // Mirrors the same shape as a field's classification and recurses
+    // through any depth of List/Array/Dictionary nesting, so the editor
+    // can render an arbitrarily deep type (e.g.
+    // Dictionary<string, Dictionary<string, List<int>>>).
+    public FieldTypeNode? Element { get; set; }
+    public FieldTypeNode? Key { get; set; }
+    public FieldTypeNode? Value { get; set; }
 
     // DataDefinition reference
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -92,4 +75,26 @@ public sealed class FieldMetadata
 
     // XML doc summary
     public string? Summary { get; set; }
+}
+
+/// <summary>
+/// Recursive type-tree node describing one level of a field's declared
+/// type. <see cref="Element"/> applies to lists/arrays; <see cref="Key"/>
+/// + <see cref="Value"/> apply to dictionaries. Children may themselves
+/// have children (e.g. <c>Dictionary&lt;string, Dictionary&lt;string, string&gt;&gt;</c>
+/// produces a node with a <see cref="Value"/> whose own <see cref="Key"/>
+/// and <see cref="Value"/> are set), supporting arbitrary depth.
+/// </summary>
+public sealed class FieldTypeNode
+{
+    public string Kind { get; set; } = "text";
+    public string? FullType { get; set; }
+    public string? ProtoTypeArg { get; set; }
+    public string[]? EnumValues { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsDataDefinition { get; set; }
+    public string? DataDefinitionType { get; set; }
+    public FieldTypeNode? Element { get; set; }
+    public FieldTypeNode? Key { get; set; }
+    public FieldTypeNode? Value { get; set; }
 }

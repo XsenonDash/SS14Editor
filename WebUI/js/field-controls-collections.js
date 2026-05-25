@@ -161,16 +161,8 @@ function listCtrl(val, meta, dis, onChange) {
                 row.appendChild(handle);
             }
             const content = _div('list-item-content');
-            content.appendChild(elementControl(meta.elementKind, meta.elementFullType, meta.elementProtoTypeArg, item, dis, nv => {
+            content.appendChild(elementControl(meta.element, item, dis, nv => {
                 arr[i] = nv; onChange([...arr]);
-            }, {
-                // Forward one level of inner-generic info so a List<List<X>>
-                // element still gets its X element kind/type when rendered.
-                elementKind: meta.elementElementKind,
-                elementFullType: meta.elementElementFullType,
-                elementProtoTypeArg: meta.elementElementProtoTypeArg,
-                // Enum values for List<EnumType>.
-                enumValues: meta.elementEnumValues,
             }));
             row.appendChild(content);
             if (!dis) {
@@ -201,12 +193,14 @@ function listCtrl(val, meta, dis, onChange) {
             const addRow = _div('list-add-row');
             const addBtn = _el('button'); addBtn.className = 'list-add-btn'; addBtn.textContent = '+ Add item';
             // Prefer a DataDefinition shape ({}) when the element type is a
-            // known DataDefinition (e.g. PrototypeLayerData) – `elementKind`
-            // alone can fall back to 'text' for unknown classes, which would
-            // otherwise produce an empty-string item that renders as a plain
-            // text input instead of the proper structured editor.
-            const isDD = !!(meta.elementFullType && state.metadata?.dataDefinitions?.[meta.elementFullType]);
-            const impls = (meta.elementFullType && state.metadata?.polymorphicTypes?.[meta.elementFullType]) || null;
+            // known DataDefinition (e.g. PrototypeLayerData) – the element
+            // `kind` alone can fall back to 'text' for unknown classes,
+            // which would otherwise produce an empty-string item that
+            // renders as a plain text input instead of the proper
+            // structured editor.
+            const elemFullType = meta.element?.fullType;
+            const isDD = !!(elemFullType && state.metadata?.dataDefinitions?.[elemFullType]);
+            const impls = (elemFullType && state.metadata?.polymorphicTypes?.[elemFullType]) || null;
             addBtn.addEventListener('click', e => {
                 if (impls && impls.length > 0) {
                     // Polymorphic base – open the searchable type picker
@@ -221,7 +215,7 @@ function listCtrl(val, meta, dis, onChange) {
                     }, false);
                     return;
                 }
-                const next = isDD ? {} : defaultForKind(meta.elementKind);
+                const next = isDD ? {} : defaultForKind(meta.element?.kind);
                 arr.push(next);
                 onChange([...arr]); rebuild();
             });
@@ -245,17 +239,8 @@ function mapCtrl(val, meta, dis, onChange) {
             const keyLabel = _div('map-key-label'); keyLabel.textContent = k;
             row.appendChild(keyLabel);
             const content = _div('map-entry-content');
-            content.appendChild(elementControl(meta.valueKind, meta.valueFullType, meta.valueProtoTypeArg, v, dis, nv => {
+            content.appendChild(elementControl(meta.value, v, dis, nv => {
                 obj[k] = nv; onChange({ ...obj });
-            }, {
-                // Forward inner element info for Dictionary<K, List<V>> so the
-                // nested list editor picks up V's elementKind/elementFullType
-                // (and detects polymorphic DataDefinition bases like CEEntityEffect).
-                elementKind: meta.valueElementKind,
-                elementFullType: meta.valueElementFullType,
-                elementProtoTypeArg: meta.valueElementProtoTypeArg,
-                // Enum values for Dictionary<K, EnumType>.
-                enumValues: meta.valueEnumValues,
             }));
             row.appendChild(content);
             if (!dis) {
@@ -268,26 +253,20 @@ function mapCtrl(val, meta, dis, onChange) {
         if (!dis) {
             const addRow = _div('map-add-row');
             // ── Typed key control ─────────────────────────────────────
-            // Map keys honor `keyKind` from the metadata extractor – so a
-            // `Dictionary<ProtoId<EntityPrototype>, …>` gets a prototype
-            // search dropdown for the key, an enum-keyed dictionary gets
-            // an enum select, etc. Falls back to a plain text input when
-            // the kind isn't known.
+            // Map keys honor the `key` node from the metadata extractor –
+            // so a `Dictionary<ProtoId<EntityPrototype>, …>` gets a
+            // prototype search dropdown for the key, an enum-keyed
+            // dictionary gets an enum select, etc. Falls back to a plain
+            // text input when the kind isn't known.
             let pendingKey = '';
             const keyHost = _div('map-key-host');
             function makeKeyCtrl() {
                 keyHost.innerHTML = '';
                 const c = elementControl(
-                    meta.keyKind || 'text',
-                    meta.keyFullType,
-                    meta.keyProtoTypeArg,
+                    meta.key || { kind: 'text' },
                     pendingKey,
                     dis,
-                    nv => { pendingKey = nv; },
-                    // Forward enum values so an enum-keyed dictionary
-                    // (e.g. Dictionary<CEUseType, …>) gets the proper enum
-                    // selector instead of a degenerate empty text input.
-                    { enumValues: meta.keyEnumValues }
+                    nv => { pendingKey = nv; }
                 );
                 keyHost.appendChild(c);
             }
@@ -306,8 +285,9 @@ function mapCtrl(val, meta, dis, onChange) {
             }
 
             const addBtn = _el('button'); addBtn.className = 'map-add-btn'; addBtn.textContent = '+ Add entry';
-            const isDD = !!(meta.valueFullType && state.metadata?.dataDefinitions?.[meta.valueFullType]);
-            const impls = (meta.valueFullType && state.metadata?.polymorphicTypes?.[meta.valueFullType]) || null;
+            const valFullType = meta.value?.fullType;
+            const isDD = !!(valFullType && state.metadata?.dataDefinitions?.[valFullType]);
+            const impls = (valFullType && state.metadata?.polymorphicTypes?.[valFullType]) || null;
             addBtn.addEventListener('click', e => {
                 const k = readPendingKey(); if (!k) return;
                 if (Object.prototype.hasOwnProperty.call(obj, k)) {
@@ -326,7 +306,7 @@ function mapCtrl(val, meta, dis, onChange) {
                     }, false);
                     return;
                 }
-                const next = isDD ? {} : defaultForKind(meta.valueKind);
+                const next = isDD ? {} : defaultForKind(meta.value?.kind);
                 obj[k] = next;
                 pendingKey = '';
                 onChange({ ...obj }); rebuild();

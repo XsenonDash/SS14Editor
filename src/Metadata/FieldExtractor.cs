@@ -299,10 +299,8 @@ public sealed class FieldExtractor
 
     private void EnrichFieldTypeInfo(FieldMetadata field, Type memberType)
     {
-        var name = memberType.Name;
-
-        // Unwrap Nullable
-        if (name.StartsWith("Nullable") && memberType.IsGenericType)
+        // Unwrap Nullable<T> so the enrichment describes the underlying type.
+        if (memberType.Name.StartsWith("Nullable") && memberType.IsGenericType)
         {
             try
             {
@@ -312,76 +310,6 @@ public sealed class FieldExtractor
             catch { /* fall through */ }
         }
 
-        // List-like (any generic IEnumerable<T> we recognize)
-        if (IsListLike(memberType))
-        {
-            try
-            {
-                var elemArg = GetListElementType(memberType);
-                if (elemArg != null)
-                {
-                    var (ek, eev, ep) = ClassifyType(elemArg);
-                    field.ElementKind = ek;
-                    field.ElementFullType = elemArg.FullName ?? elemArg.Name;
-                    if (ep != null) field.ElementProtoTypeArg = ep;
-                    if (eev != null) field.ElementEnumValues = eev;
-
-                    // One level of inner nesting (List<List<X>>).
-                    var (eek, eeft, eep) = ExtractInnerElement(elemArg);
-                    if (eek != null) { field.ElementElementKind = eek; field.ElementElementFullType = eeft; field.ElementElementProtoTypeArg = eep; }
-                }
-            }
-            catch { /* ignore */ }
-        }
-
-        // Array (T[])
-        if (memberType.IsArray)
-        {
-            try
-            {
-                var elemType = memberType.GetElementType();
-                if (elemType != null)
-                {
-                    var (ek, eev, ep) = ClassifyType(elemType);
-                    field.ElementKind = ek;
-                    field.ElementFullType = elemType.FullName ?? elemType.Name;
-                    if (ep != null) field.ElementProtoTypeArg = ep;
-                    if (eev != null) field.ElementEnumValues = eev;
-
-                    var (eek, eeft, eep) = ExtractInnerElement(elemType);
-                    if (eek != null) { field.ElementElementKind = eek; field.ElementElementFullType = eeft; field.ElementElementProtoTypeArg = eep; }
-                }
-            }
-            catch { /* ignore */ }
-        }
-
-        // Dictionary-like
-        if (IsDictionaryLike(memberType))
-        {
-            try
-            {
-                var (keyType, valueType) = GetDictionaryKeyValueTypes(memberType);
-                if (keyType != null && valueType != null)
-                {
-                    var (kk, kev, kp) = ClassifyType(keyType);
-                    var (vk, vev, vp) = ClassifyType(valueType);
-                    field.KeyKind = kk;
-                    field.KeyFullType = keyType.FullName ?? keyType.Name;
-                    field.ValueKind = vk;
-                    field.ValueFullType = valueType.FullName ?? valueType.Name;
-                    if (kp != null) field.KeyProtoTypeArg = kp;
-                    if (vp != null) field.ValueProtoTypeArg = vp;
-                    if (kev != null) field.KeyEnumValues = kev;
-                    if (vev != null) field.ValueEnumValues = vev;
-
-                    // One level of inner nesting (Dictionary<K, List<V>>).
-                    var (vek, veft, vep2) = ExtractInnerElement(valueType);
-                    if (vek != null) { field.ValueElementKind = vek; field.ValueElementFullType = veft; field.ValueElementProtoTypeArg = vep2; }
-                }
-            }
-            catch { /* ignore */ }
-        }
-
         // DataDefinition reference
         var fullName = memberType.FullName ?? memberType.Name;
         if (_dataDefinitions.ContainsKey(fullName))
@@ -389,23 +317,84 @@ public sealed class FieldExtractor
             field.IsDataDefinition = true;
             field.DataDefinitionType = fullName;
         }
+
+        // Recursive type tree — supports arbitrary nesting of
+        // List/Array/Dictionary so the editor doesn't need a flat
+        // metadata field per nesting level.
+        try
+        {
+            // Check dictionary before list — Dictionary<,> also implements
+            // IEnumerable<KeyValuePair<,>> so IsListLike would otherwise match.
+            if (IsDictionaryLike(memberType))
+            {
+                var (kT, vT) = GetDictionaryKeyValueTypes(memberType);
+                if (kT != null) field.Key = BuildTypeNode(kT, 0);
+                if (vT != null) field.Value = BuildTypeNode(vT, 0);
+            }
+            else if (IsListLike(memberType))
+            {
+                var elem = GetListElementType(memberType);
+                if (elem != null) field.Element = BuildTypeNode(elem, 0);
+            }
+            else if (memberType.IsArray)
+            {
+                var elem = memberType.GetElementType();
+                if (elem != null) field.Element = BuildTypeNode(elem, 0);
+            }
+        }
+        catch { /* ignore */ }
     }
 
     /// <summary>
-    /// Extract one level of inner element type info from a collection type
-    /// (List/Array). Returns (null, null, null) if the type is not a
-    /// recognized collection. Used to surface nested generics
-    /// (Dictionary&lt;K, List&lt;V&gt;&gt;, List&lt;List&lt;V&gt;&gt;) to the editor without
-    /// changing the existing flat metadata schema for the common case.
+    /// Recursively build a <see cref="FieldTypeNode"/> describing
+    /// <paramref name="t"/> and any nested collection/dictionary
+    /// parameters. Depth-limited as a safety net against pathological
+    /// recursive types — 8 levels is far more than any real prototype
+    /// schema needs.
     /// </summary>
-    private (string? kind, string? fullType, string? protoArg) ExtractInnerElement(Type type)
+    private FieldTypeNode? BuildTypeNode(Type? t, int depth)
     {
-        Type? inner = null;
-        if (IsListLike(type)) inner = GetListElementType(type);
-        else if (type.IsArray) inner = type.GetElementType();
-        if (inner == null) return (null, null, null);
-        var (k, _, p) = ClassifyType(inner);
-        return (k, inner.FullName ?? inner.Name, p);
+        if (t == null || depth > 8) return null;
+        if (t.Name.StartsWith("Nullable") && t.IsGenericType)
+        {
+            try { var inner = t.GetGenericArguments(); if (inner.Length > 0) return BuildTypeNode(inner[0], depth + 1); }
+            catch { /* fall through */ }
+        }
+        var (kind, ev, p) = ClassifyType(t);
+        var node = new FieldTypeNode
+        {
+            Kind = kind,
+            FullType = t.FullName ?? t.Name,
+            ProtoTypeArg = p,
+            EnumValues = ev,
+        };
+        var full = t.FullName ?? t.Name;
+        if (_dataDefinitions.ContainsKey(full))
+        {
+            node.IsDataDefinition = true;
+            node.DataDefinitionType = full;
+        }
+        try
+        {
+            if (IsDictionaryLike(t))
+            {
+                var (kT, vT) = GetDictionaryKeyValueTypes(t);
+                if (kT != null) node.Key = BuildTypeNode(kT, depth + 1);
+                if (vT != null) node.Value = BuildTypeNode(vT, depth + 1);
+            }
+            else if (IsListLike(t))
+            {
+                var elem = GetListElementType(t);
+                if (elem != null) node.Element = BuildTypeNode(elem, depth + 1);
+            }
+            else if (t.IsArray)
+            {
+                var elem = t.GetElementType();
+                if (elem != null) node.Element = BuildTypeNode(elem, depth + 1);
+            }
+        }
+        catch { /* ignore — leave children null */ }
+        return node;
     }
 
     private static Type? GetListElementType(Type type)

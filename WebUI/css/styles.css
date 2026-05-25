@@ -873,7 +873,14 @@ body {
     opacity: .35;
     font-size: 14px;
     line-height: 1;
-    padding: 0 2px;
+    /* Fixed width so the `- type:` text after it sits at a predictable
+       x-coordinate. Sibling rows below (id, abstract, parent, fields)
+       all add this width to their left padding so the whole prototype
+       block stays visually aligned despite the handle being present
+       only on the type line. */
+    width: var(--proto-drag-offset);
+    padding: 0;
+    text-align: center;
     user-select: none;
     letter-spacing: -2px;
 }
@@ -912,10 +919,14 @@ body {
    They inherit .field-row look from section 2 below. The label text "id"
    itself is the YAML key, so we DON'T add a "id: " ::before on .proto-id-text.
    !important is needed because `.field-row.field-local { padding-left: 0 }`
-   in section 2 has equal specificity and would otherwise reset the indent. */
+   in section 2 has equal specificity and would otherwise reset the indent.
+   The extra `--proto-drag-offset` matches the width of the drag handle
+   sitting on the `- type:` line above, so all sub-rows visually align
+   under the YAML key, not under the handle. */
+:root { --proto-drag-offset: 18px; }
 .field-row.proto-id-row,
-.field-row.proto-abstract-row { padding-left: var(--yaml-indent) !important; }
-.proto-parent-bar { padding-left: var(--yaml-indent) !important; }
+.field-row.proto-abstract-row { padding-left: calc(var(--yaml-indent) + var(--proto-drag-offset)) !important; }
+.proto-parent-bar { padding-left: calc(var(--yaml-indent) + var(--proto-drag-offset)) !important; }
 .proto-id-text { font-size: 13px; color: var(--yaml-string); font-family: var(--font-mono); cursor: text; padding-left: 4px; }
 .proto-id-text::before { content: ''; }
 .proto-id-text:hover { text-decoration: underline dashed var(--text-muted); text-underline-offset: 3px; }
@@ -924,11 +935,11 @@ body {
     background: transparent;
     border-bottom: none;
     padding: 0;
-    padding-left: var(--yaml-indent);
+    padding-left: calc(var(--yaml-indent) + var(--proto-drag-offset));
 }
 .proto-body {
     padding: 2px 12px 8px;
-    padding-left: calc(12px + var(--yaml-indent));
+    padding-left: calc(12px + var(--yaml-indent) + var(--proto-drag-offset));
     gap: 0;
 }
 

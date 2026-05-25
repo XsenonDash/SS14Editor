@@ -74,6 +74,8 @@ ss14-redactor serve [path] [port]     # start editor pointing at a specific proj
 ss14-redactor extract [path]          # extract metadata.json without starting the server
 ```
 
+On `serve`/`extract` the metadata cache (`Redactor/metadata.cache.txt`) is consulted first: if every scanned DLL has the same size + mtime as last time and the redactor's own version is unchanged, extraction is skipped entirely and the existing `Redactor/metadata.json` is reused — re-opening a project after a build is near-instant. Delete `Redactor/metadata.cache.txt` (or `Redactor/`) to force a full rebuild.
+
 ---
 
 ## How it works

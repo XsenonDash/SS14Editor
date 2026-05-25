@@ -75,6 +75,11 @@ internal sealed class FixtureEntityPrototype : IInheritingPrototype
     [DataField] public System.Collections.Generic.List<string>? Tags;
     [DataField] public System.Collections.Generic.Dictionary<string, int>? Counters;
     [DataField] public FixtureDataDef? Nested;
+    // Deeply nested collection to exercise BuildTypeNode recursion across
+    // any combination of List/Array/Dictionary nesting.
+    [DataField] public System.Collections.Generic.List<
+        System.Collections.Generic.Dictionary<string,
+            System.Collections.Generic.Dictionary<string, string>>>? DeepLayers;
 }
 
 [Prototype("fixtureSimple")]

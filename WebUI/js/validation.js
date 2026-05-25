@@ -83,6 +83,18 @@ function checkProtoExists(type, id) {
     for (const k of Object.keys(idx)) {
         if (idx[k].some(e => e.id === id)) return null;
     }
+    // Also accept prototypes living in currently-open (possibly unsaved)
+    // files. The on-disk index lags behind in-memory edits — without this
+    // check, creating a new prototype and immediately referencing it would
+    // flag as "unknown" until save + index rebuild.
+    if (state.openFiles) {
+        for (const fs of state.openFiles.values()) {
+            if (!Array.isArray(fs?.yaml)) continue;
+            for (const p of fs.yaml) {
+                if (p && typeof p === 'object' && p.id === id) return null;
+            }
+        }
+    }
     return { severity: 'error', message: `Unknown ${type} prototype: "${id}"` };
 }
 

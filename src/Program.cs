@@ -36,7 +36,7 @@ public static class Program
                 var port = args.Length > 2 ? int.Parse(args[2]) : 2701;
 
                 if (serveRoot != null)
-                    EnsureMetadataFresh(serveRoot);
+                    MetadataExtractor.Extract(serveRoot);
 
                 await RedactorServer.StartAsync(serveRoot, port);
                 break;
@@ -86,55 +86,5 @@ public static class Program
         if (Directory.GetFiles(dir, "*.sln", SearchOption.TopDirectoryOnly).Length > 0)
             return true;
         return false;
-    }
-
-    /// <summary>
-    /// Re-extracts metadata.json if missing or if any scanned binary is newer
-    /// than the cache. Keeps the redactor's view in sync with the latest build
-    /// without forcing the user to remember the manual extract step.
-    /// </summary>
-    private static void EnsureMetadataFresh(string solutionRoot)
-    {
-        try
-        {
-            var metaPath = Path.Combine(solutionRoot, "Redactor", "metadata.json");
-            var metaTime = File.Exists(metaPath) ? File.GetLastWriteTimeUtc(metaPath) : DateTime.MinValue;
-
-            var newest = DateTime.MinValue;
-            foreach (var rel in new[] { "bin/Content.Server", "bin/Content.Client" })
-            {
-                var dir = Path.Combine(solutionRoot, rel);
-                if (!Directory.Exists(dir)) continue;
-                foreach (var dll in Directory.EnumerateFiles(dir, "Content.*.dll", SearchOption.TopDirectoryOnly))
-                {
-                    var t = File.GetLastWriteTimeUtc(dll);
-                    if (t > newest) newest = t;
-                }
-            }
-
-            // Also include this redactor assembly itself: changes to
-            // FieldExtractor / MetadataExtractor classifier logic should
-            // trigger a regen even if the game DLLs haven't changed.
-            try
-            {
-                var selfDll = typeof(Program).Assembly.Location;
-                if (!string.IsNullOrEmpty(selfDll) && File.Exists(selfDll))
-                {
-                    var t = File.GetLastWriteTimeUtc(selfDll);
-                    if (t > newest) newest = t;
-                }
-            }
-            catch { /* ignore */ }
-
-            if (newest > metaTime)
-            {
-                Logger.Info("metadata.json out of date — regenerating...");
-                MetadataExtractor.Extract(solutionRoot);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Error($"EnsureMetadataFresh failed: {ex.Message}");
-        }
     }
 }

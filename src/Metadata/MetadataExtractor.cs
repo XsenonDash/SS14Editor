@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -34,6 +36,27 @@ public static class MetadataExtractor
             Logger.Error("No bin directories found.");
             Logger.Error("Build Content.Server and Content.Client first (dotnet build).");
             return;
+        }
+
+        var outputPath = Path.Combine(outputDir, "metadata.json");
+        var cachePath = Path.Combine(outputDir, "metadata.cache.txt");
+        var fingerprint = ComputeInputFingerprint(binDirs);
+
+        if (File.Exists(outputPath) && File.Exists(cachePath))
+        {
+            try
+            {
+                var cached = File.ReadAllText(cachePath).Trim();
+                if (cached == fingerprint)
+                {
+                    Logger.Info($"Metadata cache hit ({Path.GetFileName(outputPath)}, fingerprint {fingerprint[..12]}…) — skipping extraction.");
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Could not read metadata cache: {ex.Message} — re-extracting.");
+            }
         }
 
         Logger.Info($"Scanning {binDirs.Count} bin directories: {string.Join(", ", binDirs.Select(Path.GetFileName))}");
@@ -145,8 +168,9 @@ public static class MetadataExtractor
         };
 
         var json = JsonSerializer.Serialize(metadata, options);
-        var outputPath = Path.Combine(outputDir, "metadata.json");
         File.WriteAllText(outputPath, json);
+        try { File.WriteAllText(cachePath, fingerprint); }
+        catch (Exception ex) { Logger.Warn($"Could not write metadata cache: {ex.Message}"); }
 
         Logger.Info($"Extracted {prototypes.Count} prototypes, {components.Count} components, {dataDefinitions.Count} data definitions");
         if (skippedAssemblies > 0)
@@ -154,6 +178,46 @@ public static class MetadataExtractor
         if (skippedTypes > 0)
             Logger.Info($"Skipped {skippedTypes} problematic types");
         Logger.Info($"Metadata written to: {outputPath}");
+    }
+
+    /// <summary>
+    /// Build a deterministic fingerprint over every DLL the extractor will
+    /// scan plus the redactor's own version, so a content rebuild OR an
+    /// editor upgrade invalidates the cache automatically. Uses
+    /// path+length+last-write-time-utc per file rather than a content
+    /// hash — orders of magnitude faster for the typical SS14 fork
+    /// (hundreds of DLLs, ~hundreds of MB) and still detects every
+    /// rebuild, since MSBuild rewrites the output DLL on every change.
+    /// </summary>
+    private static string ComputeInputFingerprint(IReadOnlyList<string> binDirs)
+    {
+        var entries = new List<string>();
+        foreach (var dir in binDirs)
+        {
+            string[] dlls;
+            try { dlls = Directory.GetFiles(dir, "*.dll", SearchOption.TopDirectoryOnly); }
+            catch { continue; }
+            Array.Sort(dlls, StringComparer.OrdinalIgnoreCase);
+            foreach (var p in dlls)
+            {
+                try
+                {
+                    var fi = new FileInfo(p);
+                    entries.Add($"{Path.GetFileName(p)}|{fi.Length}|{fi.LastWriteTimeUtc.Ticks}");
+                }
+                catch { /* skip unreadable */ }
+            }
+        }
+        // Mix in the redactor's own assembly version so an editor upgrade
+        // (which can change FieldMetadata schema) invalidates the cache.
+        var selfVer = typeof(MetadataExtractor).Assembly.GetName().Version?.ToString() ?? "0";
+        entries.Add($"__redactor|{selfVer}");
+
+        using var sha = SHA256.Create();
+        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", entries)));
+        var sb = new StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes) sb.Append(b.ToString("x2"));
+        return sb.ToString();
     }
 
     private static void DiscoverAssembly(

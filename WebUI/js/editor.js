@@ -417,8 +417,8 @@ function buildCard(proto, idx) {
 
         const parentMeta = {
             fieldKind: 'list', tag: 'parent',
-            elementKind: 'protoId', elementFullType: 'protoId',
-            elementProtoTypeArg: type, required: false
+            element: { kind: 'protoId', fullType: 'protoId', protoTypeArg: type },
+            required: false
         };
         const parentSource = proto.parent !== undefined ? 'local' : 'default';
         const onParentChange = v => {

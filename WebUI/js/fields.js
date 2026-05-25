@@ -284,23 +284,13 @@ function colorCtrl(val, dis, cb) {
     tx.value = typeof val === 'string' ? val : ''; tx.disabled = dis;
     const cp = _el('input'); cp.type = 'color'; cp.className = 'color-picker'; cp.disabled = dis;
 
-    function parseHex(s) {
-        if (typeof s !== 'string') return '#ffffff';
-        const t = s.trim();
-        const m8 = /^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/.exec(t);
-        if (m8) return '#' + m8[1].toLowerCase();
-        const m6 = /^#([0-9a-fA-F]{6})$/.exec(t);
-        if (m6) return '#' + m6[1].toLowerCase();
-        const m3 = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(t);
-        if (m3) return '#' + m3[1]+m3[1] + m3[2]+m3[2] + m3[3]+m3[3];
-        return '#ffffff';
-    }
-    cp.value = parseHex(tx.value);
+    const toPickerHex = (s) => colorLiteralToHex6(s) || '#ffffff';
+    cp.value = toPickerHex(tx.value);
 
     cp.addEventListener('input', () => { tx.value = cp.value; });
     cp.addEventListener('change', () => { tx.value = cp.value; cb(tx.value); });
     tx.addEventListener('change', () => {
-        cp.value = parseHex(tx.value);
+        cp.value = toPickerHex(tx.value);
         cb(tx.value);
     });
     w.append(tx, cp);
@@ -407,9 +397,14 @@ function searchDropdown(val, searchType, dis, cb) {
             const tokens = String(q || '').trim().split(/\s+/).filter(Boolean);
             const serverHint = tokens[0] || '';
             const res = await api.searchProtos(searchType, serverHint);
+            // Merge in matching prototypes from currently-open (possibly
+            // unsaved) files so a freshly-created prototype is immediately
+            // referenceable from another prototype without waiting for save
+            // + index rebuild.
+            const merged = mergeOpenFileProtos(res, searchType);
             const refined = tokens.length > 1
-                ? res.filter(r => smartMatch(r.id, q) || smartMatch(r.name || '', q))
-                : res;
+                ? merged.filter(r => smartMatch(r.id, q) || smartMatch(r.name || '', q))
+                : merged;
             renderDd(dd, refined, inp, cb);
             dd.classList.add('visible');
             selIdx = -1;
@@ -437,6 +432,32 @@ function searchDropdown(val, searchType, dis, cb) {
     w.append(inp, dd); return w;
 }
 
+/**
+ * Augment a /api/search-protos response with prototypes from currently-
+ * open files whose `type` matches (case-insensitive). Skips duplicates
+ * already returned by the server. Without this, a freshly-created
+ * prototype isn't findable in autocomplete until save + index rebuild.
+ */
+function mergeOpenFileProtos(serverResults, searchType) {
+    if (!state.openFiles) return serverResults;
+    const seen = new Set(serverResults.map(r => r.id));
+    const out = serverResults.slice();
+    const lc = String(searchType).toLowerCase();
+    for (const fs of state.openFiles.values()) {
+        if (!Array.isArray(fs?.yaml)) continue;
+        for (const p of fs.yaml) {
+            if (!p || typeof p !== 'object') continue;
+            const t = String(p.type || '').toLowerCase();
+            if (t !== lc) continue;
+            const id = p.id;
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            out.push({ id, name: p.name });
+        }
+    }
+    return out;
+}
+
 function renderDd(dd, results, inp, cb) {
     dd.innerHTML = '';
     if (!results.length) { dd.innerHTML = '<div class="dropdown-empty">No results</div>'; return; }
@@ -454,25 +475,34 @@ function hlDd(items, idx) { items.forEach((el, i) => el.classList.toggle('select
 
 // ======================== ELEMENT HELPERS ===============================
 /**
- * Build a synthetic field meta describing a single *element* of a list, a
- * single *value* of a map, or any nested value that doesn't have its own
- * `field` entry from the C# extractor. This is the cornerstone of the
- * "one rendering pipeline" rule: every nested value – no matter how deep –
- * is rendered by `controlFor(meta, …)`, never by a parallel switch.
+ * Build a synthetic field meta describing a single element/value of a
+ * collection from a recursive `FieldTypeNode` (the server-side
+ * description of one nesting level). This is the cornerstone of the
+ * "one rendering pipeline" rule: every nested value – no matter how
+ * deep – is rendered by `controlFor(meta, …)`, never by a parallel
+ * switch.
  *
- * @param {string|undefined} kind  – fieldKind (e.g. 'soundSpecifier', 'integer')
- * @param {string|undefined} fullType – C# full type name, used to look up DataDefinitions
- * @param {string|undefined} protoArg – protoTypeArg for protoId fields
+ * @param {object|undefined|null} node - `FieldTypeNode` from the server
+ *   (or an ad-hoc shape with `kind`/`fullType`/`protoTypeArg`/...).
+ *   When null/undefined, the synthesized meta defaults to a plain text
+ *   field.
+ * @param {object|undefined} extras - optional overrides merged on top.
  */
-function synthMeta(kind, fullType, protoArg, extras) {
-    const isDD = !!(fullType && state.metadata?.dataDefinitions?.[fullType]);
+function synthMeta(node, extras) {
+    const n = node || {};
     const m = {
-        fieldKind: kind || (isDD ? 'object' : 'text'),
-        type: fullType,
-        fullType,
-        protoTypeArg: protoArg,
-        isDataDefinition: isDD,
-        dataDefinitionType: isDD ? fullType : null,
+        fieldKind: n.kind || (n.isDataDefinition ? 'object' : 'text'),
+        type: n.fullType,
+        fullType: n.fullType,
+        protoTypeArg: n.protoTypeArg,
+        enumValues: n.enumValues,
+        isDataDefinition: !!n.isDataDefinition,
+        dataDefinitionType: n.dataDefinitionType,
+        // Recursive children — read by listCtrl / mapCtrl one level
+        // deeper to keep the descent going.
+        element: n.element,
+        key: n.key,
+        value: n.value,
         required: false,
     };
     if (extras) Object.assign(m, extras);
@@ -480,12 +510,12 @@ function synthMeta(kind, fullType, protoArg, extras) {
 }
 
 /**
- * Render a nested element using the single unified pipeline. List and map
- * editors call this for every element/value so behaviour is identical to a
- * top-level field of the same type.
+ * Render a nested element using the single unified pipeline. List and
+ * map editors call this for every element/value so behaviour is
+ * identical to a top-level field of the same type.
  */
-function elementControl(kind, fullType, protoArg, val, dis, cb, extras) {
-    return controlFor(synthMeta(kind, fullType, protoArg, extras), val, dis, cb);
+function elementControl(node, val, dis, cb, extras) {
+    return controlFor(synthMeta(node, extras), val, dis, cb);
 }
 
 function defaultForKind(kind) {
@@ -515,7 +545,7 @@ function autoControl(val, dis, cb, typeHint) {
     if (typeof val === 'number') return Number.isInteger(val) ? intCtrl(val, dis, cb) : floatCtrl(val, dis, cb);
     if (typeof val === 'string') return textCtrl(val, dis, cb);
     if (Array.isArray(val)) {
-        return listCtrl(val, { elementKind: inferKindFromArray(val), elementFullType: null, elementProtoTypeArg: null }, dis, cb);
+        return listCtrl(val, { element: { kind: inferKindFromArray(val) } }, dis, cb);
     }
     // Object value with no known schema – the editor can't safely round-trip
     // these. Surface a yellow stub pointing at the type so the gap is visible,

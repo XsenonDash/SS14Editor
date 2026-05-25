@@ -112,7 +112,7 @@ public class FieldExtractorTests : IDisposable
         var fields = _extractor.ExtractDataFields(t);
         var tags = fields.Single(f => f.Name == "Tags");
         Assert.Equal("list", tags.FieldKind);
-        Assert.Equal("text", tags.ElementKind);
+        Assert.Equal("text", tags.Element?.Kind);
     }
 
     [Fact]
@@ -122,8 +122,26 @@ public class FieldExtractorTests : IDisposable
         var fields = _extractor.ExtractDataFields(t);
         var counters = fields.Single(f => f.Name == "Counters");
         Assert.Equal("map", counters.FieldKind);
-        Assert.Equal("text", counters.KeyKind);
-        Assert.Equal("integer", counters.ValueKind);
+        Assert.Equal("text", counters.Key?.Kind);
+        Assert.Equal("integer", counters.Value?.Kind);
+    }
+
+    [Fact]
+    public void ExtractDataFields_DeeplyNestedCollection_BuildsRecursiveNode()
+    {
+        // List<Dictionary<string, Dictionary<string, string>>> – the editor
+        // must see the full recursive shape so it can render a list-of-map-
+        // of-map editor without bottoming out into a "TODO: Serialize" stub.
+        var t = Get("FixtureEntityPrototype");
+        var fields = _extractor.ExtractDataFields(t);
+        var deep = fields.Single(f => f.Name == "DeepLayers");
+
+        Assert.Equal("list", deep.FieldKind);
+        Assert.Equal("map", deep.Element?.Kind);
+        Assert.Equal("text", deep.Element?.Key?.Kind);
+        Assert.Equal("map", deep.Element?.Value?.Kind);
+        Assert.Equal("text", deep.Element?.Value?.Key?.Kind);
+        Assert.Equal("text", deep.Element?.Value?.Value?.Kind);
     }
 
     [Fact]
