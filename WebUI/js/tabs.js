@@ -9,7 +9,8 @@ function renderTabs() {
     box.innerHTML = '';
     for (const [path, fs] of state.openFiles) {
         const tab = document.createElement('div');
-        tab.className = `tab${path === state.currentFile ? ' active' : ''}`;
+        const gitClass = (typeof gitClassForFile === 'function') ? gitClassForFile(path) : '';
+        tab.className = `tab${path === state.currentFile ? ' active' : ''}${gitClass}`;
         tab.dataset.path = path;
         const shortName = path.split('/').pop() + (fs.modified ? ' •' : '');
         tab.innerHTML = `<span class="tab-name">${esc(shortName)}</span><button class="tab-close">×</button>`;

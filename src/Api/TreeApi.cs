@@ -44,6 +44,13 @@ internal sealed partial class ApiRouter
     private Task HandleProtoIndexAsync(HttpListenerRequest req, HttpListenerResponse res)
         => HttpJson.WriteAsync(res, _ctx!.ProtoIndex.Index);
 
+    private Task HandleGitStatusAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        var ctx = _ctx!;
+        var r = GitStatusService.Query(ctx.SolutionRoot, ctx.PrototypesDir);
+        return HttpJson.WriteAsync(res, new { available = r.Available, files = r.Files });
+    }
+
     private Task HandleSearchProtosAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
         var q = req.QueryString["q"] ?? "";

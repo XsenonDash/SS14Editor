@@ -310,28 +310,21 @@ function buildCard(proto, idx) {
     // Apply abstract styling
     if (isAbstract) card.classList.add('proto-abstract');
 
-    // Multi-line header rendered as YAML lines. The header stays visible
-    // during collapse, so id (and abstract when supported) live here as
-    // pseudo field-rows.
-    //   Line 1:  - type: foo                        (+ delete button on hover)
-    //   Line 2:  id: my-proto-id                    (always visible)
-    //   Line 3:  abstract: true                     (only when meta declares an abstract field)
-    // The parent-bar (see below) is appended next, also part of the sticky header.
+    // Single-line proto identity bar: drag handle, type, delete, collapse-eye.
+    // All other proto-level fields (id, abstract, parent) render as regular
+    // field rows in the body so they obey the same collapse/override rules
+    // as everything else parsed from the prototype.
     const hdr = _div('proto-header');
     hdr.innerHTML = `<div class="proto-type-line">
             <span class="proto-drag-handle" draggable="true" title="Drag to reorder">\u22ee\u22ee</span>
             <span class="proto-type-badge" title="${esc(meta?.summary || '')}">${esc(type)}</span>
             <button class="delete-proto-btn" title="Delete prototype">×</button>
-        </div>
-        <div class="field-row field-local proto-id-row">
-            <label class="field-label">id</label>
-            <div class="field-control-wrap">
-                <span class="proto-id-text" title="Double-click to rename ID">${esc(String(id))}</span>
-            </div>
         </div>`;
     // Abstract row — only rendered for proto types whose metadata actually
     // declares an abstract field. Built via the standard bool fieldRow so
     // spacing and styling match every other bool field in the editor.
+    // Stored for later appending into the body.
+    let absRow = null;
     if (hasAbstractField) {
         const absSource = isAbstract ? 'local' : 'default';
         const absMeta = { fieldKind: 'boolean', tag: 'abstract' };
@@ -347,17 +340,13 @@ function buildCard(proto, idx) {
         const onAbsReset = absSource === 'local'
             ? () => { deleteField([idx], 'abstract'); }
             : null;
-        const absRow = fieldRow('abstract', absMeta, isAbstract, absSource, onAbsChange, onAbsReset);
+        absRow = fieldRow('abstract', absMeta, isAbstract, absSource, onAbsChange, onAbsReset);
         absRow.classList.add('proto-abstract-row');
-        hdr.appendChild(absRow);
     }
 
-    // ID rename on double-click
-    const idSpan = hdr.querySelector('.proto-id-text');
-    idSpan.addEventListener('dblclick', e => {
-        e.stopPropagation();
-        startIdRename(idSpan, proto, idx);
-    });
+    // ID rename on double-click — span lives in the body now, so we have to
+    // resolve it after the body is built. The handler is attached below
+    // after `idRow` is created.
 
     hdr.querySelector('.delete-proto-btn').addEventListener('click', e => {
         e.stopPropagation();
@@ -377,7 +366,7 @@ function buildCard(proto, idx) {
     hdr.addEventListener('contextmenu', e => {
         e.preventDefault(); e.stopPropagation();
         const items = [
-            { label: 'Rename ID…', action: () => startIdRename(idSpan, proto, idx) },
+            { label: 'Rename ID…', action: () => startIdRename(card.querySelector('.proto-id-text'), proto, idx) },
             { label: 'Collapse / Expand', action: () => hdr.querySelector('.collapse-btn').click() },
         ];        if (meta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(meta.className) });
         items.push('---', { label: 'Delete prototype', danger: true, action: () => hdr.querySelector('.delete-proto-btn').click() });
@@ -424,10 +413,11 @@ function buildCard(proto, idx) {
         renderEditor();
     });
 
-    // Parent sub-header (uses same list<protoId> logic as other fields)
+    // Parent field, rendered as a regular fieldRow in the body (same as
+    // every other proto-level field) so collapse + override semantics work
+    // uniformly.
+    let parentRow = null;
     if (inheriting) {
-        const parentBar = _div('proto-parent-bar');
-
         // Normalize parent value to always be an array for the list control.
         // Critical: an empty string is treated as a single in-progress slot,
         // NOT as "no parent". This is what makes "+ Add item" work – clicking
@@ -455,12 +445,27 @@ function buildCard(proto, idx) {
             else setFieldValue([idx], 'parent', arr);
         };
         const onParentReset = parentSource === 'local' ? () => deleteField([idx], 'parent') : null;
-        parentBar.appendChild(fieldRow('parent', parentMeta, parentVal, parentSource, onParentChange, onParentReset));
-        hdr.appendChild(parentBar);
+        parentRow = fieldRow('parent', parentMeta, parentVal, parentSource, onParentChange, onParentReset);
     }
 
     // body
     const body = _div('proto-body');
+
+    // Proto-level fields rendered as regular field rows so collapse / override
+    // semantics are identical to the metadata-driven fields below.
+    // 1. ID row (always treated as local override — id is mandatory).
+    const idRow = _div('field-row field-local proto-id-row');
+    idRow.innerHTML = `<label class="field-label">id</label>
+        <div class="field-control-wrap">
+            <span class="proto-id-text" title="Double-click to rename ID">${esc(String(id))}</span>
+        </div>`;
+    const idSpan = idRow.querySelector('.proto-id-text');
+    idSpan.addEventListener('dblclick', e => { e.stopPropagation(); startIdRename(idSpan, proto, idx); });
+    body.appendChild(idRow);
+    // 2. Abstract row (only when meta declares the field).
+    if (absRow) body.appendChild(absRow);
+    // 3. Parent row (only for inheriting prototypes).
+    if (parentRow) body.appendChild(parentRow);
 
     // Resolve inherited values
     let inherited = {};
@@ -711,6 +716,10 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited) {
     const cMeta = state.metadata?.components?.[compType];
     const hdr = _div('component-header');
     hdr.innerHTML = `<span class="component-type" title="${esc(cMeta?.summary || '')}">${esc(compType)}</span>`;
+    // Eye-icon collapse toggle, right after the component name. The reset
+    // / remove button (when present) appears AFTER the eye, matching the
+    // field-row pattern "label: data [eye] [reset/delete]".
+    hdr.appendChild(buildCollapseBtn(() => card));
     if (!isInh && compIdx >= 0) {
         const rmBtn = _el('button');
         rmBtn.className = 'field-reset-btn comp-remove-btn';
@@ -731,8 +740,6 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited) {
         });
         hdr.appendChild(rmBtn);
     }
-    // Eye-icon collapse toggle, after the component name/remove button.
-    hdr.appendChild(buildCollapseBtn(() => card));
     hdr.addEventListener('contextmenu', e => {
         e.preventDefault(); e.stopPropagation();
         const items = [];

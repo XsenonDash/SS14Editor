@@ -11,12 +11,45 @@ async function refreshAll() {
         state.fileTree = tree;
         state.protoIndex = await api.loadProtoIndex();
         state.resolvedCache.clear();
+        await refreshGitStatus();
         const treeEl = document.getElementById('file-tree');
         renderFileTree(state.fileTree, treeEl, document.getElementById('file-search').value);
+        renderTabs();
     } catch (e) {
         console.error('[Init] Refresh failed:', e);
         toast(`Refresh error: ${e.message}`, 'error');
     }
+}
+
+// Pull the latest git status and re-paint the tree + tabs. Best-effort: any
+// failure (no git, not a repo) just clears the highlighting silently.
+async function refreshGitStatus() {
+    try {
+        state.gitStatus = await api.gitStatus();
+    } catch (e) {
+        console.warn('[Git] status fetch failed:', e);
+        state.gitStatus = null;
+        return;
+    }
+    repaintGitDecorations();
+}
+
+// Debounced git-status refresh; many SSE events can land in a row (a bulk
+// `git checkout` touches dozens of files), no point running `git status`
+// once per event.
+let _gitRefreshTimer = null;
+function scheduleGitRefresh(delay = 250) {
+    clearTimeout(_gitRefreshTimer);
+    _gitRefreshTimer = setTimeout(refreshGitStatus, delay);
+}
+
+function repaintGitDecorations() {
+    const treeEl = document.getElementById('file-tree');
+    if (treeEl && state.fileTree) {
+        const q = document.getElementById('file-search').value;
+        renderFileTree(state.fileTree, treeEl, q);
+    }
+    renderTabs();
 }
 
 // ======================== KEYBOARD =====================================
@@ -29,6 +62,7 @@ document.addEventListener('keydown', e => {
             api.saveFile(fs.path, fs.content).then(async () => {
                 fs.modified = false; renderTabs(); toast('Saved', 'success');
                 try { const st = await api.fileStamps([fs.path]); if (st[fs.path]) state.fileStamps.set(fs.path, st[fs.path]); } catch {}
+                scheduleGitRefresh(100);
             }).catch(e => {
                 console.error('[Keyboard] Manual save failed:', e);
                 toast(`Save error: ${e.message}`, 'error');
@@ -54,6 +88,9 @@ function startFileEventStream() {
             let payload;
             try { payload = JSON.parse(ev.data); } catch { return; }
             if (!payload || payload.type !== 'file-change') return;
+            // Any file change (ours or external) can shift git status: schedule
+            // a refresh so tree + tabs re-colour.
+            scheduleGitRefresh();
             const path = payload.path;
             if (!path) return;
             const fs = state.openFiles.get(path);
@@ -267,6 +304,7 @@ async function loadEditorData() {
         api.loadMetadata().then(m => { state.metadata = m; console.log('[Init] Metadata loaded:', Object.keys(m.prototypes || {}).length, 'prototypes,', Object.keys(m.components || {}).length, 'components'); }),
         api.loadTree().then(t => { state.fileTree = t; console.log('[Init] File tree loaded'); }),
         api.loadProtoIndex().then(i => { state.protoIndex = i; console.log('[Init] Proto index loaded:', Object.values(i).reduce((s, a) => s + a.length, 0), 'entries'); }),
+        api.gitStatus().then(g => { state.gitStatus = g; if (g && g.available) console.log('[Init] Git status loaded:', Object.keys(g.files || {}).length, 'changed files'); }).catch(() => { state.gitStatus = null; }),
     ]);
     if (!state.metadata)   state.metadata   = { prototypes: {}, components: {} };
     if (!state.protoIndex) state.protoIndex = {};
@@ -283,7 +321,9 @@ async function loadEditorData() {
             const q = e.target.value;
             _searchTimer = setTimeout(() => renderFileTree(state.fileTree || [], treeEl, q), CFG.searchDebounce);
         });
-        document.getElementById('refresh-btn').addEventListener('click', () => refreshAll().then(() => toast('Refreshed', 'success')));
+        document.getElementById('tree-toggle-btn').addEventListener('click', () => {
+            document.getElementById('app').classList.toggle('sidebar-collapsed');
+        });
         // Start file change push channel (SSE)
         startFileEventStream();
     }

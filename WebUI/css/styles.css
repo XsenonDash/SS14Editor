@@ -80,6 +80,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transition: width .18s ease, min-width .18s ease;
 }
 .sidebar-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -91,12 +92,12 @@ body {
     color: var(--text-primary);
     letter-spacing: .4px;
 }
-#refresh-btn {
+#tree-toggle-btn {
     background: none; border: none; color: var(--text-secondary);
     cursor: pointer; font-size: 18px; padding: 4px 8px;
     border-radius: var(--radius-sm); transition: .2s;
 }
-#refresh-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+#tree-toggle-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
 
 .sidebar-search { padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
 .sidebar-search input {
@@ -1230,7 +1231,7 @@ body {
     border-style: solid;
     border-color: var(--accent);
 }
-.list-add-btn::before, .map-add-btn::before { content: '# '; color: var(--yaml-comment); }
+.list-add-btn::before { content: '# '; color: var(--yaml-comment); }
 
 .map-key-label {
     color: var(--yaml-key);
@@ -1667,3 +1668,109 @@ body {
     animation: setup-spin .8s linear infinite;
 }
 .editor-loading-label { font-size: 13px; font-family: var(--font-mono); }
+
+/* ======================== Git Decorations =============== */
+/* Colour file-tree leaves and tabs by their git working-tree status. */
+.tree-file.git-new      .tree-name { color: #54a861; }
+.tree-file.git-modified .tree-name { color: #d98c2b; }
+.tree-file.git-renamed  .tree-name { color: #d98c2b; font-style: italic; }
+.tree-file.git-conflict .tree-name { color: #e54a4a; }
+.tree-file.git-deleted  .tree-name { color: #888888; text-decoration: line-through; }
+
+/* Directories: lighter tint so the user can spot dirty subtrees while collapsed. */
+.tree-dir.git-dir-new      > .tree-name { color: #87c690; }
+.tree-dir.git-dir-modified > .tree-name { color: #e0a060; }
+.tree-dir.git-dir-renamed  > .tree-name { color: #e0a060; }
+.tree-dir.git-dir-conflict > .tree-name { color: #e87878; }
+
+/* Tabs in the top strip get a left-border accent + tinted name. */
+.tab.git-new      .tab-name { color: #54a861; }
+.tab.git-modified .tab-name { color: #d98c2b; }
+.tab.git-renamed  .tab-name { color: #d98c2b; font-style: italic; }
+.tab.git-conflict .tab-name { color: #e54a4a; }
+.tab.git-deleted  .tab-name { color: #888888; text-decoration: line-through; }
+
+/* ======================== Header Icon Buttons (unified) =========== */
+/* Reset (\u21BA), Component remove (\u00D7), Collapse eye (\u{1F441}), and the proto
+   delete (\u00D7) buttons all share the same visual shape: a small square icon
+   button with a subtle border, hover-tinted by purpose (warning / error /
+   accent). Overrides the older heterogeneous styles. */
+.field-reset-btn,
+.collapse-btn,
+.delete-proto-btn,
+.proto-type-line .delete-proto-btn {
+    box-sizing: border-box;
+    width: 22px; height: 22px;
+    padding: 0; margin: 0 0 0 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    cursor: pointer; line-height: 1;
+    font-size: 14px;
+    transition: border-color .15s, color .15s, background .15s, opacity .15s;
+}
+/* Stretch the proto/component ? glyph optically � it sits visually small
+   because '\u00D7' has a narrow advance. */
+.field-reset-btn.comp-remove-btn,
+.delete-proto-btn { font-size: 16px; }
+
+/* Hover tints � only border + text colour change, no full background fill. */
+.field-reset-btn:hover {
+    background: transparent;
+    border-color: var(--warning);
+    color: var(--warning);
+}
+.field-reset-btn.comp-remove-btn:hover,
+.delete-proto-btn:hover {
+    background: transparent;
+    border-color: var(--error);
+    color: var(--error);
+    opacity: 1;
+}
+.collapse-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Ensure the float-to-end of block field rows still works (CSS section 13
+   for block fields sets flex order). No change needed here. */
+
+/* ======================== Git Decorations (folders) =============== */
+/* Folder colours match file colours \u2014 same hex, no desaturation. */
+.tree-dir.git-dir-new      > .tree-name { color: #54a861; }
+.tree-dir.git-dir-modified > .tree-name { color: #d98c2b; }
+.tree-dir.git-dir-renamed  > .tree-name { color: #d98c2b; font-style: italic; }
+.tree-dir.git-dir-conflict > .tree-name { color: #e54a4a; }
+
+/* ======================== Proto header strip ===================== */
+/* The header is now just a single line (type + drag + delete + eye).
+   id / abstract / parent fields render as regular body rows. Remove
+   the dashed separator and any padding that implies a separate strip. */
+.proto-header {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+}
+.proto-card > .proto-header > .proto-type-line {
+    padding: 2px 0;
+}
+
+/* ======================== Sidebar collapse ============================ */
+/* The header-bar button (#tree-toggle-btn) toggles .sidebar-collapsed on
+   the app shell. When collapsed the sidebar shrinks to a thin column that
+   only shows the toggle button, freeing horizontal space for the editor. */
+#app.sidebar-collapsed > #sidebar {
+    width: 36px;
+    min-width: 36px;
+}
+#app.sidebar-collapsed > #sidebar > .sidebar-header {
+    padding: 8px 4px;
+    justify-content: center;
+}
+#app.sidebar-collapsed > #sidebar > .sidebar-header h1,
+#app.sidebar-collapsed > #sidebar > .sidebar-search,
+#app.sidebar-collapsed > #sidebar > .file-tree,
+#app.sidebar-collapsed > #sidebar > #file-tree {
+    display: none;
+}

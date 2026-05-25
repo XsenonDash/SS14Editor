@@ -10,6 +10,35 @@ function renderFileTree(nodes, container, filter = '') {
     buildTreeDom(filtered, container, 0);
 }
 
+// Look up the git colour class for a file path. Falls back to '' (no extra
+// class) when git is unavailable, the file is read-only, or it's clean.
+function gitClassForFile(path) {
+    if (!state.gitStatus || !state.gitStatus.available) return '';
+    if (path && path.startsWith('__engine__/')) return '';
+    const s = state.gitStatus.files && state.gitStatus.files[path];
+    if (!s) return '';
+    return ' git-' + s;
+}
+
+// For a directory: returns the highest-priority status of any descendant file
+// (modified > new > renamed > conflict > deleted). Used to colour folder names
+// so the user can spot dirty subtrees while the folder is collapsed.
+function gitClassForDir(path) {
+    if (!state.gitStatus || !state.gitStatus.available) return '';
+    if (path && path.startsWith('__engine__')) return '';
+    const files = state.gitStatus.files;
+    if (!files) return '';
+    const prefix = path ? path + '/' : '';
+    const priority = { 'conflict': 5, 'modified': 4, 'new': 3, 'renamed': 2, 'deleted': 1 };
+    let best = null;
+    for (const [p, s] of Object.entries(files)) {
+        if (!prefix || p.startsWith(prefix)) {
+            if (!best || (priority[s] || 0) > (priority[best] || 0)) best = s;
+        }
+    }
+    return best ? ' git-dir-' + best : '';
+}
+
 function filterTreeNodes(nodes, q) {
     if (!q) return nodes;
 
@@ -42,7 +71,8 @@ function filterTreeNodes(nodes, q) {
 function buildTreeDom(nodes, parent, depth) {
     for (const n of nodes) {
         const el = document.createElement('div');
-        el.className = `tree-item ${n.isDir ? 'tree-dir' : 'tree-file'}`;
+        const gitClass = n.isDir ? gitClassForDir(n.path) : gitClassForFile(n.path);
+        el.className = `tree-item ${n.isDir ? 'tree-dir' : 'tree-file'}${gitClass}`;
         el.style.paddingLeft = `${12 + depth * 16}px`;
         if (n.isDir) {
             const expanded = state.expandedDirs?.has(n.path);

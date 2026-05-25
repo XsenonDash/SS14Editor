@@ -40,6 +40,7 @@ internal sealed partial class ApiRouter
             ["/api/search-protos"] = HandleSearchProtosAsync,
             ["/api/refresh-index"] = HandleRefreshIndexAsync,
             ["/api/rename-proto-id"] = HandleRenameProtoIdAsync,
+            ["/api/git-status"] = HandleGitStatusAsync,
 
             // File CRUD (FileApi.cs)
             ["/api/file"] = HandleFileAsync,
