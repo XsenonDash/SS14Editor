@@ -794,7 +794,7 @@ body {
     --yaml-punct:      #5a6a8c;   /* dim slate   – ':' '-' '!' brackets   */
     --yaml-string:     #82aaff;   /* cyan-blue   – string scalars         */
     --yaml-number:     #f78c6c;   /* orange      – numeric scalars        */
-    --yaml-bool:       #ff5370;   /* pink        – bool scalars           */
+    --yaml-bool:       #82aaff;   /* blue        – bool scalars           */
     --yaml-tag:        #ffcb6b;   /* amber       – !type tags             */
     --yaml-comment:    #546e7a;   /* greyed      – # comments / hints     */
     --yaml-indent:     2ch;       /* 1 level of YAML indentation          */
@@ -859,7 +859,7 @@ body {
 .field-row.proto-id-row,
 .field-row.proto-abstract-row { padding-left: var(--yaml-indent) !important; }
 .proto-parent-bar { padding-left: var(--yaml-indent) !important; }
-.proto-id-text { font-size: 13px; color: var(--yaml-string); font-family: var(--font-mono); cursor: text; }
+.proto-id-text { font-size: 13px; color: var(--yaml-string); font-family: var(--font-mono); cursor: text; padding-left: 4px; }
 .proto-id-text::before { content: ''; }
 .proto-id-text:hover { text-decoration: underline dashed var(--text-muted); text-underline-offset: 3px; }
 
@@ -1003,7 +1003,7 @@ body {
 }
 .field-row .field-input[type="number"] { color: var(--yaml-number); }
 .field-row .field-select { color: var(--yaml-tag); }
-.field-row .toggle-label { color: var(--yaml-key); font-family: var(--font-mono); }
+.field-row .toggle-label { color: var(--yaml-bool); font-family: var(--font-mono); }
 
 /* ── 4.  Reset & remove icons → hover-only ─────────────────────────── */
 .field-reset-btn,

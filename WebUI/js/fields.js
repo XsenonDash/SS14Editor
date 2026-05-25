@@ -55,6 +55,18 @@ function fieldRow(key, meta, value, source, onChange, onReset) {
     lbl.title = tipParts.join('\n');
     row.appendChild(lbl);
 
+    // Reset button sits on the label line (BEFORE the control-wrap) so block
+    // values (list/map/datadef) can wrap to the next row without pushing the
+    // reset button to the far right of the editor.
+    if (isLocal && onReset) {
+        const resetBtn = _el('button');
+        resetBtn.className = 'field-reset-btn';
+        resetBtn.title = 'Reset to inherited / default value';
+        resetBtn.textContent = '↺';
+        resetBtn.addEventListener('click', e => { e.stopPropagation(); onReset(); });
+        row.appendChild(resetBtn);
+    }
+
     const controlWrap = _div('field-control-wrap');
     if (source === 'default' && (value === undefined || value === null)) {
         const ph = _el('span'); ph.className = 'field-default-placeholder'; ph.textContent = '(default)';
@@ -63,16 +75,6 @@ function fieldRow(key, meta, value, source, onChange, onReset) {
         controlWrap.appendChild(ph);
     } else {
         controlWrap.appendChild(controlFor(meta, value, false, onChange));
-    }
-
-    // Reset button for locally-defined fields
-    if (isLocal && onReset) {
-        const resetBtn = _el('button');
-        resetBtn.className = 'field-reset-btn';
-        resetBtn.title = 'Reset to inherited / default value';
-        resetBtn.textContent = '↺';
-        resetBtn.addEventListener('click', e => { e.stopPropagation(); onReset(); });
-        controlWrap.appendChild(resetBtn);
     }
 
     row.appendChild(controlWrap);
