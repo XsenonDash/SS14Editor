@@ -3,6 +3,9 @@
 A standalone visual editor for [Space Station 14](https://github.com/space-wizards/space-station-14) prototype YAML files.  
 Works with **any SS14 fork** — just point it at your project folder.
 
+> [!WARNING]
+> The tool is not yet ready for full use; it contains a large number of bugs and has many features that have not yet been implemented
+
 <img width="988" height="807" alt="image" src="https://github.com/user-attachments/assets/52efefa6-2e1a-44ef-89bc-5fb1c10d46f0" />
 
 ---
