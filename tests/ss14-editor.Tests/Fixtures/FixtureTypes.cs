@@ -197,5 +197,19 @@ internal sealed class FixtureWithRuntimeHandlesDef
     [DataField] public string KeepMe = "visible";
 }
 
+// ---------- Vector2i / Vector3i / TimeSpan kind-classification fixtures ----------
+// Minimal stubs named after the real SS14 types. ClassifyType matches by
+// type.Name so we don't need to reference the real RobustToolbox assembly.
+internal struct Vector2i { }
+internal struct Vector3i { }
+
+[DataDefinition]
+internal sealed class FixtureVectorTimespanDef
+{
+    [DataField] public Vector2i GridPos;
+    [DataField] public Vector3i GridPos3;
+    [DataField] public TimeSpan Duration;
+}
+
 
 

@@ -172,4 +172,31 @@ public class FieldExtractorTests : IDisposable
         Assert.Contains(fields, f => f.Name == "Probability");
         Assert.Contains(fields, f => f.Name == "Message");
     }
+
+    [Fact]
+    public void ExtractDataFields_Vector2iKind()
+    {
+        var t = Get("FixtureVectorTimespanDef");
+        var fields = _extractor.ExtractDataFields(t);
+        var f = fields.Single(x => x.Name == "GridPos");
+        Assert.Equal("vector2i", f.FieldKind);
+    }
+
+    [Fact]
+    public void ExtractDataFields_Vector3iKind()
+    {
+        var t = Get("FixtureVectorTimespanDef");
+        var fields = _extractor.ExtractDataFields(t);
+        var f = fields.Single(x => x.Name == "GridPos3");
+        Assert.Equal("vector3i", f.FieldKind);
+    }
+
+    [Fact]
+    public void ExtractDataFields_TimespanKind()
+    {
+        var t = Get("FixtureVectorTimespanDef");
+        var fields = _extractor.ExtractDataFields(t);
+        var f = fields.Single(x => x.Name == "Duration");
+        Assert.Equal("timespan", f.FieldKind);
+    }
 }

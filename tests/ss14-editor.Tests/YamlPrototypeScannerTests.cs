@@ -178,4 +178,78 @@ public class YamlPrototypeScannerTests
         var entries = Assert.Single(idx).Value;
         Assert.Equal("Tagged", entries[0].Id);
     }
+
+    [Fact]
+    public void Scan_EntityTable_GroupSelector_WithShorthandChildren_IndexesRoot()
+    {
+        using var tmp = new TempDir();
+        // EntityTableTypeSerializer allows bare `- id: EntityName` entries
+        // without !type: inside children lists. The root prototype id must
+        // still be indexed correctly and the nested `id:` values must NOT
+        // be picked up as the prototype id.
+        var idx = ScanText("""
+            - type: entityTable
+              id: SalvageMobTable
+              table: !type:GroupSelector
+                children:
+                - id: MobCarpSalvage
+                  weight: 5
+                - id: MobTickSalvage
+                  weight: 3
+                - !type:NestedSelector
+                  tableId: OtherTable
+            """, tmp);
+
+        Assert.True(idx.ContainsKey("entityTable"));
+        var entry = Assert.Single(idx["entityTable"]);
+        Assert.Equal("SalvageMobTable", entry.Id);
+    }
+
+    [Fact]
+    public void Scan_EntityTable_AllSelector_NestedAllSelector_IndexesAllTables()
+    {
+        using var tmp = new TempDir();
+        var idx = ScanText("""
+            - type: entityTable
+              id: FillLockerWarden
+              table: !type:AllSelector
+                children:
+                - id: FlashlightSeclite
+                - id: WeaponDisabler
+                  prob: 0.5
+            - type: entityTable
+              id: FillLockerCaptain
+              table: !type:AllSelector
+                children:
+                - id: ClothingHeadHatCapCap
+            """, tmp);
+
+        Assert.True(idx.ContainsKey("entityTable"));
+        Assert.Equal(2, idx["entityTable"].Count);
+        Assert.Contains(idx["entityTable"], e => e.Id == "FillLockerWarden");
+        Assert.Contains(idx["entityTable"], e => e.Id == "FillLockerCaptain");
+    }
+
+    [Fact]
+    public void Scan_EntityTable_NestedSelectors_DoNotPolluteMobTable()
+    {
+        using var tmp = new TempDir();
+        // A file mixing entityTable and entity prototypes: entity ids inside
+        // entityTable children must not leak into the entity index.
+        var idx = ScanText("""
+            - type: entity
+              id: RealEntity
+            - type: entityTable
+              id: MyTable
+              table: !type:GroupSelector
+                children:
+                - id: FakeEntity
+                  weight: 1
+            """, tmp);
+
+        Assert.Single(idx["entity"]);
+        Assert.Equal("RealEntity", idx["entity"][0].Id);
+        Assert.Single(idx["entityTable"]);
+        Assert.Equal("MyTable", idx["entityTable"][0].Id);
+    }
 }

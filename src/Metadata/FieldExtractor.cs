@@ -432,11 +432,13 @@ public sealed class FieldExtractor
             "SoundSpecifier" or "SoundPathSpecifier" or "SoundCollectionSpecifier"
                 => ("soundSpecifier", null, null),
             "ResPath" or "ResourcePath" => ("resPath", null, null),
-            "Vector2" or "Vector2i" => ("vector2", null, null),
-            "Vector3" or "Vector3i" => ("vector3", null, null),
+            "Vector2" => ("vector2", null, null),
+            "Vector2i" => ("vector2i", null, null),
+            "Vector3" => ("vector3", null, null),
+            "Vector3i" => ("vector3i", null, null),
             "Vector4" => ("vector4", null, null),
             "Box2" or "Box2i" => ("box2", null, null),
-            "TimeSpan" => ("text", null, null),
+            "TimeSpan" => ("timespan", null, null),
             "LocId" => ("text", null, null),
             // ComponentRegistry is structurally a list of component entries
             // (mirrors the top-level `components:` block on a prototype).

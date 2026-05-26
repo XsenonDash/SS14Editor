@@ -167,8 +167,8 @@ function controlFor(meta, value, dis, onChange) {
     // object, the metadata is stale / mismatched – never let a scalar control
     // stringify it. Route to the best-known structured renderer instead.
     if (isObj && !polymorphicKinds.has(kind)
-        && kind !== 'list' && kind !== 'map' && kind !== 'vector2'
-        && kind !== 'vector3' && kind !== 'vector4' && kind !== 'box2'
+        && kind !== 'list' && kind !== 'map' && kind !== 'vector2' && kind !== 'vector2i'
+        && kind !== 'vector3' && kind !== 'vector3i' && kind !== 'vector4' && kind !== 'box2'
         && kind !== 'tuple') {
         const ddType = meta.dataDefinitionType || meta.fullType || meta.type;
         if (ddType && state.metadata?.dataDefinitions?.[ddType])
@@ -182,7 +182,7 @@ function controlFor(meta, value, dis, onChange) {
     // ComponentRegistry-typed field the metadata extractor couldn't model),
     // hand off to autoControl rather than letting textCtrl stringify the
     // value into "[object Object],[object Object],...".
-    const primKinds = { boolean: 1, integer: 1, float: 1, text: 1, color: 1, enum: 1, flags: 1, entityProtoId: 1, protoId: 1 };
+    const primKinds = { boolean: 1, integer: 1, float: 1, text: 1, color: 1, enum: 1, flags: 1, entityProtoId: 1, protoId: 1, timespan: 1 };
     if (primKinds[kind] && value !== null && typeof value === 'object') {
         return autoControl(value, dis, onChange, meta.fullType || meta.type);
     }
@@ -200,10 +200,13 @@ function controlFor(meta, value, dis, onChange) {
         case 'list':          return listCtrl(value, meta, dis, onChange);
         case 'map':           return mapCtrl(value, meta, dis, onChange);
         case 'tuple':         return tupleCtrl(value, meta, dis, onChange);
-        case 'vector2':       return vectorCtrl(value, ['x', 'y'], dis, onChange);
-        case 'vector3':       return vectorCtrl(value, ['x', 'y', 'z'], dis, onChange);
-        case 'vector4':       return vectorCtrl(value, ['x', 'y', 'z', 'w'], dis, onChange);
-        case 'box2':          return vectorCtrl(value, ['l', 'b', 'r', 't'], dis, onChange);
+        case 'vector2':       return vectorCtrl(value, ['x', 'y'], dis, onChange, false);
+        case 'vector2i':      return vectorCtrl(value, ['x', 'y'], dis, onChange, true);
+        case 'vector3':       return vectorCtrl(value, ['x', 'y', 'z'], dis, onChange, false);
+        case 'vector3i':      return vectorCtrl(value, ['x', 'y', 'z'], dis, onChange, true);
+        case 'vector4':       return vectorCtrl(value, ['x', 'y', 'z', 'w'], dis, onChange, false);
+        case 'box2':          return vectorCtrl(value, ['l', 'b', 'r', 't'], dis, onChange, false);
+        case 'timespan':      return timespanCtrl(value, dis, onChange);
         case 'spriteSpecifier': return spriteSpecifierCtrl(value, dis, onChange);
         case 'soundSpecifier':  return soundSpecifierCtrl(value, dis, onChange);
         case 'resPath':         return resPathCtrl(value, dis, onChange);
@@ -274,14 +277,26 @@ function boolCtrl(val, dis, cb) {
 }
 
 function intCtrl(val, dis, cb) {
-    const w = _div('field-control');
+    const w = _div('field-control int-spinner');
     const inp = _el('input'); inp.type = 'number'; inp.className = 'field-input number-input';
     inp.value = val != null ? val : ''; inp.step = '1'; inp.disabled = dis;
     inp.addEventListener('change', () => { const n = parseInt(inp.value); if (!isNaN(n)) cb(n); });
     inp.addEventListener('keydown', e => {
         if (!/^[0-9-]$/.test(e.key) && !['Backspace','Delete','ArrowLeft','ArrowRight','Tab','Home','End'].includes(e.key) && !e.ctrlKey) e.preventDefault();
     });
-    w.appendChild(inp); return w;
+    w.appendChild(inp);
+    if (!dis) {
+        const arrows = _div('vector-int-arrows');
+        const up = _el('button'); up.type = 'button'; up.className = 'vector-int-btn'; up.textContent = '▲';
+        up.title = '+1';
+        up.addEventListener('click', () => { inp.stepUp(); const n = parseInt(inp.value); if (!isNaN(n)) cb(n); });
+        const dn = _el('button'); dn.type = 'button'; dn.className = 'vector-int-btn'; dn.textContent = '▼';
+        dn.title = '-1';
+        dn.addEventListener('click', () => { inp.stepDown(); const n = parseInt(inp.value); if (!isNaN(n)) cb(n); });
+        arrows.append(up, dn);
+        w.appendChild(arrows);
+    }
+    return w;
 }
 
 function floatCtrl(val, dis, cb) {
@@ -372,7 +387,7 @@ function flagsCtrl(val, opts, dis, cb) {
 
 // resPathAutocomplete + spriteSpecifierCtrl moved to field-controls-paths.js
 
-function vectorCtrl(val, axes, dis, cb) {
+function vectorCtrl(val, axes, dis, cb, isInt = false) {
     const w = _div('field-control vector-control');
     // Parse value: could be "x, y" string or {x:1, y:2} object
     const parts = {};
@@ -385,18 +400,89 @@ function vectorCtrl(val, axes, dis, cb) {
         axes.forEach(a => { parts[a] = '0'; });
     }
     function emit() {
-        const result = axes.map(a => parts[a] || '0').join(', ');
+        const result = axes.map(a => {
+            const v = parts[a] || '0';
+            return isInt ? String(parseInt(v) || 0) : v;
+        }).join(', ');
         cb(result);
     }
     for (const a of axes) {
         const g = _div('vector-axis');
         const lbl = _el('span'); lbl.className = 'vector-axis-label'; lbl.textContent = a.toUpperCase();
-        const inp = _el('input'); inp.type = 'number'; inp.step = 'any';
-        inp.className = 'field-input vector-input number-input-float'; inp.value = parts[a]; inp.disabled = dis;
+        const inp = _el('input'); inp.type = 'number';
+        inp.step = isInt ? '1' : 'any';
+        inp.className = 'field-input vector-input' + (isInt ? ' vector-input-int number-input' : ' number-input-float');
+        inp.value = parts[a]; inp.disabled = dis;
         inp.addEventListener('change', () => { parts[a] = inp.value; emit(); });
         g.append(lbl, inp);
+        if (isInt && !dis) {
+            const arrows = _div('vector-int-arrows');
+            const up = _el('button'); up.type = 'button'; up.className = 'vector-int-btn'; up.textContent = '▲';
+            up.title = '+1';
+            up.addEventListener('click', () => {
+                inp.stepUp(); parts[a] = inp.value; emit();
+            });
+            const dn = _el('button'); dn.type = 'button'; dn.className = 'vector-int-btn'; dn.textContent = '▼';
+            dn.title = '-1';
+            dn.addEventListener('click', () => {
+                inp.stepDown(); parts[a] = inp.value; emit();
+            });
+            arrows.append(up, dn);
+            g.appendChild(arrows);
+        }
         w.appendChild(g);
     }
+    return w;
+}
+
+// ── TimeSpan helpers ─────────────────────────────────────────────────
+// Engine (RobustToolbox) TimeSpan serializer supports:
+//   plain number → seconds   "Xs" or "XS" → seconds
+//   "Xm" or "XM" → minutes   "Xh" or "XH" → hours
+// We always write the letter form for human readability.
+function _parseTimespan(val) {
+    if (val === null || val === undefined || val === '') return { value: 0, unit: 's' };
+    const s = String(val).trim();
+    const match = s.match(/^(-?[\d.]+)\s*([smhSMH])$/);
+    if (match) {
+        return { value: parseFloat(match[1]), unit: match[2].toLowerCase() };
+    }
+    // Plain number = seconds; pick the most human-readable unit.
+    const totalSec = parseFloat(s) || 0;
+    if (totalSec !== 0 && totalSec % 3600 === 0) return { value: totalSec / 3600, unit: 'h' };
+    if (totalSec !== 0 && totalSec % 60 === 0)   return { value: totalSec / 60,   unit: 'm' };
+    return { value: totalSec, unit: 's' };
+}
+
+function timespanCtrl(val, dis, cb) {
+    const parsed = _parseTimespan(val);
+    let curValue = parsed.value;
+    let curUnit  = parsed.unit;
+
+    const w = _div('field-control timespan-control');
+
+    const inp = _el('input'); inp.type = 'number'; inp.step = 'any';
+    inp.className = 'field-input timespan-input number-input-float';
+    inp.value = curValue; inp.disabled = dis;
+
+    const sel = _el('select'); sel.className = 'field-select timespan-unit'; sel.disabled = dis;
+    for (const [u, lbl] of [['s', 's (sec)'], ['m', 'm (min)'], ['h', 'h (hr)']]) {
+        const opt = _el('option'); opt.value = u; opt.textContent = lbl;
+        if (u === curUnit) opt.selected = true;
+        sel.appendChild(opt);
+    }
+
+    function emit() {
+        const n = parseFloat(inp.value);
+        if (isNaN(n)) return;
+        const numStr = Number.isInteger(n) ? String(n) : String(n);
+        cb(numStr + sel.value);
+    }
+
+    inp.addEventListener('change', () => { curValue = parseFloat(inp.value) || 0; emit(); });
+    sel.addEventListener('change', () => { curUnit = sel.value; emit(); });
+
+    w.append(inp, sel);
     return w;
 }
 
@@ -547,8 +633,9 @@ function defaultForKind(kind) {
         case 'integer': return 0;
         case 'float':   return 0.0;
         case 'text': case 'entityProtoId': case 'protoId': case 'color': return '';
-        case 'vector2': return '0, 0';
-        case 'vector3': return '0, 0, 0';
+        case 'vector2': case 'vector2i': return '0, 0';
+        case 'vector3': case 'vector3i': return '0, 0, 0';
+        case 'timespan': return '0s';
         case 'vector4': return '0, 0, 0, 0';
         case 'box2':    return '0, 0, 0, 0';
         case 'spriteSpecifier': return { sprite: '', state: '' };

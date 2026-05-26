@@ -210,7 +210,21 @@ function listCtrl(val, meta, dis, onChange) {
                     e.stopPropagation();
                     showSearchableTypePicker(addBtn, impls, null, fullName => {
                         if (!fullName) return;
-                        arr.push({ __yamlTag: fullName.split('.').pop() });
+                        // If this type can be identified solely by its required
+                        // fields (like EntSelector via `id:`), create it as a
+                        // tag-less shorthand so it matches the canonical YAML form
+                        // used by the engine's custom TypeSerializer.
+                        const typeMeta = state.metadata?.dataDefinitions?.[fullName];
+                        const reqFields = (typeMeta?.fields || []).filter(f => f.required && !f.isId && !f.isParent);
+                        const reqTags = reqFields.map(f => f.tag);
+                        const canShorthand = reqTags.length > 0 && _inferConcreteType(elemFullType, reqTags) === fullName;
+                        if (canShorthand) {
+                            const shorthand = {};
+                            for (const f of reqFields) shorthand[f.tag] = defaultValueForMeta(f);
+                            arr.push(shorthand);
+                        } else {
+                            arr.push({ __yamlTag: fullName.split('.').pop() });
+                        }
                         onChange([...arr]); rebuild();
                     }, false);
                     return;
