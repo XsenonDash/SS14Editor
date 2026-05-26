@@ -18,9 +18,8 @@ namespace Content.Redactor.Redactor;
 /// </summary>
 public static class MetadataExtractor
 {
-    public static void Extract(string solutionRoot)
+    public static void Extract(string solutionRoot, string outputDir)
     {
-        var outputDir = Path.Combine(solutionRoot, "Redactor");
         Directory.CreateDirectory(outputDir);
 
         var serverBinDir = Path.Combine(solutionRoot, "bin", "Content.Server");

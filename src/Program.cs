@@ -26,7 +26,7 @@ public static class Program
                     Console.Error.WriteLine("Could not find solution root. Pass it as argument.");
                     return;
                 }
-                MetadataExtractor.Extract(extractRoot);
+                MetadataExtractor.Extract(extractRoot, RedactorServer.ProjectDataDir(extractRoot));
                 break;
 
             case "scandefaults":
@@ -47,7 +47,7 @@ public static class Program
                 var port = args.Length > 2 ? int.Parse(args[2]) : 2701;
 
                 if (serveRoot != null)
-                    MetadataExtractor.Extract(serveRoot);
+                    MetadataExtractor.Extract(serveRoot, RedactorServer.ProjectDataDir(serveRoot));
 
                 await RedactorServer.StartAsync(serveRoot, port);
                 break;

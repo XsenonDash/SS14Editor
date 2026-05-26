@@ -60,7 +60,7 @@ internal sealed partial class ApiRouter
         try
         {
             Logger.Info($"Extracting metadata for: {projectPath}");
-            MetadataExtractor.Extract(projectPath);
+            MetadataExtractor.Extract(projectPath, RedactorServer.ProjectDataDir(projectPath));
         }
         catch (Exception ex)
         {

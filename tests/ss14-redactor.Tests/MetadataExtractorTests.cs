@@ -32,8 +32,9 @@ public class MetadataExtractorTests
 
     private static JsonDocument RunAndRead(string root)
     {
-        MetadataExtractor.Extract(root);
-        var metaPath = Path.Combine(root, "Redactor", "metadata.json");
+        var outputDir = Path.Combine(root, "Redactor");
+        MetadataExtractor.Extract(root, outputDir);
+        var metaPath = Path.Combine(outputDir, "metadata.json");
         Assert.True(File.Exists(metaPath), "metadata.json not written");
         return JsonDocument.Parse(File.ReadAllText(metaPath));
     }
@@ -112,8 +113,9 @@ public class MetadataExtractorTests
     public void Extract_NoBinDirs_NoOp()
     {
         using var tmp = new TempDir();
-        MetadataExtractor.Extract(tmp.Path);
-        var metaPath = Path.Combine(tmp.Path, "Redactor", "metadata.json");
+        var outputDir = Path.Combine(tmp.Path, "Redactor");
+        MetadataExtractor.Extract(tmp.Path, outputDir);
+        var metaPath = Path.Combine(outputDir, "metadata.json");
         Assert.False(File.Exists(metaPath));
     }
 }

@@ -79,9 +79,27 @@ public static class RedactorServer
     /// Called both at startup (when a root is provided) and by <see cref="ApiRouter"/>
     /// when the user configures a project via the browser UI.
     /// </summary>
+    /// <summary>
+    /// Returns a per-project data directory stored in the OS user's local
+    /// application data folder (never inside the scanned project tree).
+    /// </summary>
+    internal static string ProjectDataDir(string solutionRoot)
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var normalized = solutionRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var projectName = Path.GetFileName(normalized);
+        var safe = new System.Text.StringBuilder();
+        foreach (var c in projectName)
+            safe.Append(char.IsLetterOrDigit(c) || c == '-' || c == '_' || c == '.' ? c : '_');
+        var pathBytes = System.Text.Encoding.UTF8.GetBytes(normalized.ToLowerInvariant());
+        var hash = System.Security.Cryptography.SHA256.HashData(pathBytes);
+        var hashStr = Convert.ToHexString(hash.AsSpan(0, 4)).ToLowerInvariant();
+        return Path.Combine(appData, "ss14-redactor", $"{safe}-{hashStr}");
+    }
+
     internal static RedactorContext BuildContext(string solutionRoot)
     {
-        var redactorDir = Path.Combine(solutionRoot, "Redactor");
+        var redactorDir = ProjectDataDir(solutionRoot);
         var prototypesDir = Path.Combine(solutionRoot, "Resources", "Prototypes");
         var resourcesDir = Path.Combine(solutionRoot, "Resources");
         var texturesDir = Path.Combine(solutionRoot, "Resources", "Textures");
