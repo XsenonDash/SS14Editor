@@ -75,7 +75,7 @@ function renderEditor(groupId) {
         area.innerHTML = '';
         for (let i = 0; i < protos.length; i++) {
             try {
-                area.appendChild(buildCard(protos[i], i));
+                area.appendChild(buildCard(protos[i], i, filePath));
             } catch (e) {
                 console.error('[Editor] Error building card:', protos[i]?.id || i, e);
                 const errCard = _div('proto-card proto-error');
@@ -337,7 +337,7 @@ function addNewPrototype(type) {
 }
 
 // ======================== PROTO CARD ===================================
-function buildCard(proto, idx) {
+function buildCard(proto, idx, filePath) {
     // Default to collapsed: only overridden (.field-local) rows are visible
     // out of the box; expand reveals every field. Per-card collapse state
     // is preserved across re-renders by save/restoreCollapseState.
@@ -371,7 +371,7 @@ function buildCard(proto, idx) {
         const absSource = isAbstract ? 'local' : 'default';
         const absMeta = { fieldKind: 'boolean', tag: 'abstract' };
         const onAbsChange = checked => {
-            const fs = state.openFiles.get(state.currentFile);
+            const fs = state.openFiles.get(filePath);
             if (!fs || !fs.yaml[idx]) return;
             if (checked) fs.yaml[idx].abstract = true;
             else delete fs.yaml[idx].abstract;
@@ -380,7 +380,7 @@ function buildCard(proto, idx) {
             renderEditor();
         };
         const onAbsReset = absSource === 'local'
-            ? () => { deleteField([idx], 'abstract'); }
+            ? () => { deleteField([idx], 'abstract', filePath); }
             : null;
         absRow = fieldRow('abstract', absMeta, isAbstract, absSource, onAbsChange, onAbsReset);
         absRow.classList.add('proto-abstract-row');
@@ -393,7 +393,7 @@ function buildCard(proto, idx) {
     hdr.querySelector('.delete-proto-btn').addEventListener('click', e => {
         e.stopPropagation();
         if (!confirm(`Delete prototype "${id}"?`)) return;
-        const fs = state.openFiles.get(state.currentFile);
+        const fs = state.openFiles.get(filePath);
         if (fs && fs.yaml) {
             fs.yaml.splice(idx, 1);
             commitChange(fs);
@@ -446,7 +446,7 @@ function buildCard(proto, idx) {
         const from = parseInt(e.dataTransfer.getData('application/x-proto-idx'), 10);
         const to = idx;
         if (Number.isNaN(from) || from === to) return;
-        const fs = state.openFiles.get(state.currentFile);
+        const fs = state.openFiles.get(filePath);
         if (!fs || !Array.isArray(fs.yaml) || from < 0 || from >= fs.yaml.length) return;
         const [moved] = fs.yaml.splice(from, 1);
         fs.yaml.splice(to, 0, moved);
@@ -481,11 +481,11 @@ function buildCard(proto, idx) {
             // and friends persist – an empty parent slot is a valid in-progress
             // state that the user fills in next).
             const arr = Array.isArray(v) ? v.filter(x => x != null) : [];
-            if (arr.length === 0) deleteField([idx], 'parent');
-            else if (arr.length === 1) setFieldValue([idx], 'parent', arr[0]);
-            else setFieldValue([idx], 'parent', arr);
+            if (arr.length === 0) deleteField([idx], 'parent', filePath);
+            else if (arr.length === 1) setFieldValue([idx], 'parent', arr[0], filePath);
+            else setFieldValue([idx], 'parent', arr, filePath);
         };
-        const onParentReset = parentSource === 'local' ? () => deleteField([idx], 'parent') : null;
+        const onParentReset = parentSource === 'local' ? () => deleteField([idx], 'parent', filePath) : null;
         parentRow = fieldRow('parent', parentMeta, parentVal, parentSource, onParentChange, onParentReset);
     }
 
@@ -500,7 +500,7 @@ function buildCard(proto, idx) {
     //    other prototypes may reference it as a parent.
     const idMeta = { fieldKind: 'string', tag: 'id', required: true };
     const onIdChange = v => {
-        const fs = state.openFiles.get(state.currentFile);
+        const fs = state.openFiles.get(filePath);
         if (!fs || !fs.yaml[idx]) return;
         const newId = String(v ?? '').trim();
         if (!newId || newId === fs.yaml[idx].id) return;
@@ -528,8 +528,8 @@ function buildCard(proto, idx) {
 
             const { value, source } = getFieldValue(proto, f.tag, inherited, f.default);
 
-            const onReset = source === 'local' ? () => deleteField([idx], f.tag) : null;
-            body.appendChild(fieldRow(f.tag, f, value, source, v => setFieldValue([idx], f.tag, v), onReset));
+            const onReset = source === 'local' ? () => deleteField([idx], f.tag, filePath) : null;
+            body.appendChild(fieldRow(f.tag, f, value, source, v => setFieldValue([idx], f.tag, v, filePath), onReset));
         }
     }
 
@@ -537,19 +537,19 @@ function buildCard(proto, idx) {
     for (const [k, v] of Object.entries(proto)) {
         if (k.startsWith('__') || renderedTags.has(k)) continue;
         const source = 'local'; // if in proto, it's local
-        body.appendChild(genericRow(k, v, source, nv => setFieldValue([idx], k, nv), () => deleteField([idx], k)));
+        body.appendChild(genericRow(k, v, source, nv => setFieldValue([idx], k, nv, filePath), () => deleteField([idx], k, filePath)));
     }
 
     // Inherited-only fields not yet shown
     for (const [k, v] of Object.entries(inherited)) {
         if (['type', 'id', 'parent', 'abstract', 'components'].includes(k)) continue;
         if (renderedTags.has(k) || proto[k] !== undefined) continue;
-        body.appendChild(genericRow(k, v, 'inherited', nv => setFieldValue([idx], k, nv), null));
+        body.appendChild(genericRow(k, v, 'inherited', nv => setFieldValue([idx], k, nv, filePath), null));
     }
 
     // Components section
     if (type === 'entity' || proto.components) {
-        const cs = buildComponentsSection(proto, idx, inherited);
+        const cs = buildComponentsSection(proto, idx, inherited, filePath);
         if (cs) body.appendChild(cs);
     }
 
@@ -631,10 +631,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ======================== COMPONENTS SECTION ============================
-function buildComponentsSection(proto, protoIdx, inherited) {
+function buildComponentsSection(proto, protoIdx, inherited, filePath) {
     const sec = _div('components-section');
     sec.innerHTML = `<div class="components-header"><span>components</span><button class="add-component-btn" title="Add component">+</button></div>`;
-    sec.querySelector('.add-component-btn').addEventListener('click', () => showAddComponentModal(proto, protoIdx));
+    sec.querySelector('.add-component-btn').addEventListener('click', () => showAddComponentModal(proto, protoIdx, filePath));
 
     const localComps = proto.components || [];
     const inhComps   = inherited.components || [];
@@ -653,7 +653,7 @@ function buildComponentsSection(proto, protoIdx, inherited) {
         reset.title = 'Reset components (revert to inherited)';
         reset.addEventListener('click', e => {
             e.stopPropagation();
-            const fs = state.openFiles.get(state.currentFile);
+            const fs = state.openFiles.get(filePath);
             if (!fs || !fs.yaml[protoIdx]) return;
             delete fs.yaml[protoIdx].components;
             state.resolvedCache.clear();
@@ -666,19 +666,19 @@ function buildComponentsSection(proto, protoIdx, inherited) {
     const inhMap = new Map();
     for (const c of inhComps) { if (c && c.type && !localMap.has(c.type)) inhMap.set(c.type, c); }
 
-    for (const [ct, { data, idx }] of localMap) sec.appendChild(compCard(ct, data, false, protoIdx, idx, inherited));
-    for (const [ct, data]          of inhMap)   sec.appendChild(compCard(ct, data, true,  protoIdx, -1, inherited));
+    for (const [ct, { data, idx }] of localMap) sec.appendChild(compCard(ct, data, false, protoIdx, idx, inherited, undefined, filePath));
+    for (const [ct, data]          of inhMap)   sec.appendChild(compCard(ct, data, true,  protoIdx, -1, inherited, undefined, filePath));
     return sec;
 }
 
-function showAddComponentModal(proto, protoIdx) {
+function showAddComponentModal(proto, protoIdx, filePath) {
     const existing = new Set((proto.components || []).map(c => c?.type).filter(Boolean));
     if (proto.parent) {
         const inh = resolveInheritance(proto.type, proto.parent);
         if (inh?.components) for (const c of inh.components) { if (c?.type) existing.add(c.type); }
     }
     pickComponentType(existing, (t) => {
-        const fs = state.openFiles.get(state.currentFile);
+        const fs = state.openFiles.get(filePath ?? state.currentFile);
         if (!fs || !fs.yaml[protoIdx]) return;
         if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
         fs.yaml[protoIdx].components.push({ type: t });
@@ -727,8 +727,8 @@ function pickComponentType(excludeSet, onPick) {
 }
 
 /** Copy an inherited component to local YAML so it can be edited. Returns new compIdx. */
-function localizeComponent(protoIdx, compType) {
-    const fs = state.openFiles.get(state.currentFile);
+function localizeComponent(protoIdx, compType, filePath) {
+    const fs = state.openFiles.get(filePath ?? state.currentFile);
     if (!fs || !fs.yaml[protoIdx]) return -1;
     if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
     // Check if already localized
@@ -738,7 +738,7 @@ function localizeComponent(protoIdx, compType) {
     return fs.yaml[protoIdx].components.length - 1;
 }
 
-function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx) {
+function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, filePath) {
     // `ctx` (optional) decouples this card from prototype state so it can
     // also be used by the ComponentRegistry field control. When provided,
     // it intercepts mutations: { write(tag, value), reset(tag), remove(),
@@ -776,7 +776,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx) {
         rmBtn.addEventListener('click', e => {
             e.stopPropagation();
             if (ctx) { ctx.remove(); return; }
-            const fs = state.openFiles.get(state.currentFile);
+            const fs = state.openFiles.get(filePath ?? state.currentFile);
             if (fs && fs.yaml[protoIdx]?.components) {
                 fs.yaml[protoIdx].components.splice(compIdx, 1);
                 commitChange(fs); renderEditor();
@@ -791,7 +791,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx) {
         if (!isInh && compIdx >= 0) {
             items.push('---', { label: isOverride ? 'Reset to inherited' : 'Remove component', danger: !isOverride, action: () => {
                 if (ctx) { ctx.remove(); return; }
-                const fs = state.openFiles.get(state.currentFile);
+                const fs = state.openFiles.get(filePath ?? state.currentFile);
                 if (fs && fs.yaml[protoIdx]?.components) {
                     fs.yaml[protoIdx].components.splice(compIdx, 1);
                     commitChange(fs); renderEditor();
@@ -820,16 +820,16 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx) {
     function compOnChange(tag, nv) {
         if (ctx) { ctx.write(tag, nv); return; }
         if (isInh) {
-            const newIdx = localizeComponent(protoIdx, compType);
+            const newIdx = localizeComponent(protoIdx, compType, filePath);
             if (newIdx < 0) return;
-            setFieldValue([protoIdx, 'components', newIdx], tag, nv);
+            setFieldValue([protoIdx, 'components', newIdx], tag, nv, filePath);
         } else {
-            setFieldValue([protoIdx, 'components', compIdx], tag, nv);
+            setFieldValue([protoIdx, 'components', compIdx], tag, nv, filePath);
         }
     }
     function compOnReset(tag) {
         if (ctx) { ctx.reset(tag); return; }
-        if (!isInh && compIdx >= 0) deleteField([protoIdx, 'components', compIdx], tag);
+        if (!isInh && compIdx >= 0) deleteField([protoIdx, 'components', compIdx], tag, filePath);
     }
 
     if (cMeta) {
@@ -879,8 +879,8 @@ function collapseAllComponents(collapse) {
 // `path` is an array of keys to reach the target object, e.g.:
 //   proto field:     [protoIdx]               → fs.yaml[protoIdx]
 //   component field: [protoIdx, 'components', compIdx] → fs.yaml[protoIdx].components[compIdx]
-function setFieldValue(path, tag, value) {
-    const fs = state.openFiles.get(state.currentFile);
+function setFieldValue(path, tag, value, filePath) {
+    const fs = state.openFiles.get(filePath ?? state.currentFile);
     if (!fs) return;
     let obj = fs.yaml;
     for (const key of path) { obj = obj?.[key]; }
@@ -891,8 +891,8 @@ function setFieldValue(path, tag, value) {
     scheduleRenderEditor();
 }
 
-function deleteField(path, tag) {
-    const fs = state.openFiles.get(state.currentFile);
+function deleteField(path, tag, filePath) {
+    const fs = state.openFiles.get(filePath ?? state.currentFile);
     if (!fs) return;
     let obj = fs.yaml;
     for (const key of path) { obj = obj?.[key]; }

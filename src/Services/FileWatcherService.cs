@@ -69,9 +69,13 @@ internal sealed class FileWatcherService : IDisposable
         // filtered, not just the first one.
         if (_suppress.TryGetValue(canonical, out var suppressedAt))
         {
+            // One-shot: consume the stamp immediately so only the first
+            // echo event from our own write is suppressed.  External changes
+            // (git checkout, revert, etc.) that arrive after the first echo
+            // are no longer blocked by a stale suppress window.
+            _suppress.TryRemove(canonical, out _);
             if (DateTime.UtcNow - suppressedAt < SuppressWindow)
                 return;
-            _suppress.TryRemove(canonical, out _);
         }
 
         _pending.AddOrUpdate(
