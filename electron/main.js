@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -97,8 +97,6 @@ function createWindow() {
     });
 
     mainWindow.loadURL(`http://localhost:${PORT}/`);
-    mainWindow.setMenuBarVisibility(false);
-
     mainWindow.on('close', e => {
         // Hide to tray instead of closing unless we are really quitting
         if (!app.isQuitting) {
@@ -106,6 +104,59 @@ function createWindow() {
             mainWindow.hide();
         }
     });
+}
+
+// ---------------------------------------------------------------------------
+// Application menu  (Project | Help)
+// ---------------------------------------------------------------------------
+function createAppMenu() {
+    const template = [
+        {
+            label: 'Project',
+            submenu: [
+                {
+                    label: 'Open other repository',
+                    click: () => {
+                        const req = http.request(
+                            { hostname: 'localhost', port: PORT, path: '/api/close', method: 'POST' },
+                            res => {
+                                res.resume();
+                                mainWindow.webContents
+                                    .executeJavaScript('openOtherRepository()')
+                                    .catch(() => mainWindow.reload());
+                            }
+                        );
+                        req.on('error', () => mainWindow.reload());
+                        req.end();
+                    },
+                },
+            ],
+        },
+        {
+            label: 'Help',
+            submenu: [
+                {
+                    label: 'Check for updates',
+                    click: () => {
+                        if (app.isPackaged) {
+                            const { autoUpdater } = require('electron-updater');
+                            autoUpdater.checkForUpdates().catch(err => {
+                                dialog.showErrorBox('Update check failed', String(err));
+                            });
+                        } else {
+                            dialog.showMessageBox(mainWindow, {
+                                type: 'info',
+                                title: 'Check for updates',
+                                message: 'Running in development mode — no update check available.',
+                                buttons: ['OK'],
+                            });
+                        }
+                    },
+                },
+            ],
+        },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +172,6 @@ function createTray() {
         {
             label: 'Open',
             click: () => { mainWindow.show(); mainWindow.focus(); },
-        },
-        {
-            label: 'Open in browser',
-            click: () => shell.openExternal(`http://localhost:${PORT}/`),
         },
         { type: 'separator' },
         {
@@ -176,6 +223,7 @@ app.whenReady().then(() => {
 
     waitForServer(() => {
         createWindow();
+        createAppMenu();
         createTray();
         setupAutoUpdater();
     });

@@ -14,6 +14,9 @@ internal sealed partial class ApiRouter
         var version = Assembly.GetExecutingAssembly()
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
             ?.InformationalVersion ?? "0.0.0-dev";
+        // Strip SourceLink build metadata (e.g. +abc1234)
+        var plus = version.IndexOf('+');
+        if (plus >= 0) version = version[..plus];
 
         var ctx = _ctx;
         if (ctx == null)
@@ -140,5 +143,13 @@ internal sealed partial class ApiRouter
         }
 
         await HttpJson.WriteAsync(res, new { path = selected ?? string.Empty });
+    }
+
+    private Task HandleCloseAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        var ctx = _ctx;
+        _ctx = null;
+        ctx?.FileWatcher.Dispose();
+        return HttpJson.WriteAsync(res, new { ok = true });
     }
 }

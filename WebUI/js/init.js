@@ -154,6 +154,30 @@ function startFileEventStream() {
     await loadEditorData();
 })();
 
+// ======================== OPEN OTHER REPO =============================
+function openOtherRepository() {
+    state.openFiles.clear();
+    state.fileStamps.clear();
+    state.parentFileCache.clear();
+    state.resolvedCache.clear();
+    state.fileTree   = null;
+    state.protoIndex = null;
+    state.metadata   = null;
+    state.currentFile = null;
+    state.gitStatus  = null;
+    state.groups     = [{ id: 'g1', tabs: [], activeTab: null }];
+    state.activeGroupId = 'g1';
+
+    // Clone interactive setup elements to strip accumulated event listeners
+    // before showSetupOverlay() re-attaches them.
+    ['setup-open-btn', 'setup-browse-btn', 'setup-path'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.replaceWith(el.cloneNode(true));
+    });
+
+    showSetupOverlay();
+}
+
 // ======================== SETUP OVERLAY ================================
 const HISTORY_KEY = 'ss14-editor-history';
 
