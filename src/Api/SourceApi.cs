@@ -10,7 +10,7 @@ internal sealed partial class ApiRouter
 {
     private async Task HandleOpenInExplorerAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         var fullPath = PathSecurity.Resolve(ctx.PrototypesDir, relPath);
         if (fullPath != null)
@@ -32,7 +32,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleOpenDefaultAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         var fullPath = PathSecurity.Resolve(ctx.PrototypesDir, relPath);
         if (fullPath != null && File.Exists(fullPath))
@@ -48,7 +48,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleOpenSourceAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var className = req.QueryString["class"];
         if (!string.IsNullOrEmpty(className))
         {

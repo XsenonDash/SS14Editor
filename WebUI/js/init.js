@@ -61,7 +61,6 @@ document.addEventListener('keydown', e => {
             clearTimeout(fs._saveTimer);
             api.saveFile(fs.path, fs.content).then(async () => {
                 fs.modified = false; renderTabs(); toast('Saved', 'success');
-                try { const st = await api.fileStamps([fs.path]); if (st[fs.path]) state.fileStamps.set(fs.path, st[fs.path]); } catch {}
                 scheduleGitRefresh(100);
             }).catch(e => {
                 console.error('[Keyboard] Manual save failed:', e);
@@ -157,7 +156,6 @@ function startFileEventStream() {
 // ======================== OPEN OTHER REPO =============================
 function openOtherRepository() {
     state.openFiles.clear();
-    state.fileStamps.clear();
     state.parentFileCache.clear();
     state.resolvedCache.clear();
     state.fileTree   = null;

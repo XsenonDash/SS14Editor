@@ -931,10 +931,6 @@ function scheduleAutosave(fs) {
         try {
             await api.saveFile(fs.path, fs.content);
             fs.modified = false; renderTabs(); toast('Saved', 'success');
-            try {
-                const stamps = await api.fileStamps([fs.path]);
-                if (stamps[fs.path]) state.fileStamps.set(fs.path, stamps[fs.path]);
-            } catch {}
             // Refresh git decorations so the tree + tabs colour the file as
             // modified. The Ctrl+S handler does the same — autosave used to
             // skip it, leaving the tree stale until the next SSE event.

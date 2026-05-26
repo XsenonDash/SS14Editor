@@ -66,50 +66,60 @@ internal sealed partial class ApiRouter
             return;
         }
 
+        // Serialize the heavy work and offload it from the HttpListener thread
+        // so the UI doesn't time out and a second configure can't race us.
+        await _configureGate.WaitAsync();
+        EditorContext? newCtx = null;
         try
         {
-            Logger.Info($"Extracting metadata for: {projectPath}");
-            MetadataExtractor.Extract(projectPath, EditorServer.ProjectDataDir(projectPath));
+            await Task.Run(() =>
+            {
+                Logger.Info($"Extracting metadata for: {projectPath}");
+                MetadataExtractor.Extract(projectPath, EditorServer.ProjectDataDir(projectPath));
+
+                newCtx = EditorServer.BuildContext(projectPath);
+                var captured = newCtx;
+                captured.FileWatcher.Changed += evt =>
+                {
+                    var rel = evt.RelativePath;
+                    switch (evt.Kind)
+                    {
+                        case FileChangeKind.Deleted:
+                            captured.ProtoIndex.RefreshFile(evt.FullPath, rel);
+                            break;
+                        case FileChangeKind.Created:
+                        case FileChangeKind.Changed:
+                            if (File.Exists(evt.FullPath))
+                                captured.ProtoIndex.RefreshFile(evt.FullPath, rel);
+                            break;
+                    }
+                    captured.Events.Broadcast(new { type = "file-change", kind = evt.Kind.ToString().ToLowerInvariant(), path = rel });
+                };
+
+                Logger.Info("Building prototype index...");
+                captured.ProtoIndex.Rebuild();
+                Logger.Info($"Indexed {captured.ProtoIndex.TotalCount} prototypes across {captured.ProtoIndex.TypeCount} types");
+                captured.FileWatcher.Start();
+            });
         }
         catch (Exception ex)
         {
-            await HttpJson.WriteErrorAsync(res, 500, $"Failed to extract metadata: {ex.Message}");
+            newCtx?.Dispose();
+            _configureGate.Release();
+            await HttpJson.WriteErrorAsync(res, 500, $"Failed to configure project: {ex.Message}");
             return;
         }
 
-        var newCtx = EditorServer.BuildContext(projectPath);
-        newCtx.FileWatcher.Changed += evt =>
-        {
-            var rel = evt.RelativePath;
-            switch (evt.Kind)
-            {
-                case FileChangeKind.Deleted:
-                    newCtx.ProtoIndex.RefreshFile(evt.FullPath, rel);
-                    break;
-                case FileChangeKind.Created:
-                case FileChangeKind.Changed:
-                    if (File.Exists(evt.FullPath))
-                        newCtx.ProtoIndex.RefreshFile(evt.FullPath, rel);
-                    break;
-            }
-            newCtx.Events.Broadcast(new { type = "file-change", kind = evt.Kind.ToString().ToLowerInvariant(), path = rel });
-        };
-
-        Logger.Info("Building prototype index...");
-        newCtx.ProtoIndex.Rebuild();
-        Logger.Info($"Indexed {newCtx.ProtoIndex.TotalCount} prototypes across {newCtx.ProtoIndex.TypeCount} types");
-        newCtx.FileWatcher.Start();
-
-        var oldCtx = _ctx;
-        _ctx = newCtx;
-        oldCtx?.FileWatcher.Dispose();
+        // Atomic swap; old context is disposed when its lease count drops to zero.
+        SwapContext(newCtx);
+        _configureGate.Release();
 
         Logger.Info($"Project configured: {projectPath}");
         await HttpJson.WriteAsync(res, new
         {
             success = true,
             projectPath,
-            prototypes = newCtx.ProtoIndex.TotalCount,
+            prototypes = newCtx!.ProtoIndex.TotalCount,
             typeCount = newCtx.ProtoIndex.TypeCount,
         });
     }
@@ -147,9 +157,7 @@ internal sealed partial class ApiRouter
 
     private Task HandleCloseAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx;
-        _ctx = null;
-        ctx?.FileWatcher.Dispose();
+        SwapContext(null);
         return HttpJson.WriteAsync(res, new { ok = true });
     }
 }

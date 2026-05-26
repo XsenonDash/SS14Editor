@@ -11,7 +11,7 @@ internal sealed partial class ApiRouter
 {
     private async Task HandleFileAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         if (string.IsNullOrEmpty(relPath))
         {
@@ -67,7 +67,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleRenameFileAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var doc = await HttpJson.ReadBodyAsync(req);
         var oldRel = doc.GetProperty("oldPath").GetString()!;
         var newName = doc.GetProperty("newName").GetString()!;
@@ -97,7 +97,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleDeleteFileAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         if (string.IsNullOrEmpty(relPath))
         {
@@ -120,7 +120,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleCreateFileAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var doc = await HttpJson.ReadBodyAsync(req);
         var parentDir = doc.TryGetProperty("dir", out var dirEl) ? dirEl.GetString() ?? "" : "";
         var fileName = doc.GetProperty("name").GetString()!;
@@ -147,21 +147,5 @@ internal sealed partial class ApiRouter
         var rel = Path.GetRelativePath(ctx.PrototypesDir, fileFull).Replace('\\', '/');
         ctx.ProtoIndex.RefreshFile(fileFull, rel);
         await HttpJson.WriteAsync(res, new { success = true, path = rel });
-    }
-
-    private async Task HandleFileStampsAsync(HttpListenerRequest req, HttpListenerResponse res)
-    {
-        var ctx = _ctx!;
-        var doc = await HttpJson.ReadBodyAsync(req);
-        var paths = doc.GetProperty("paths").EnumerateArray().Select(p => p.GetString()!).ToList();
-        var stamps = new Dictionary<string, long>();
-        foreach (var rp in paths)
-        {
-            var fp = PathSecurity.Resolve(ctx.PrototypesDir, rp);
-            stamps[rp] = (fp != null && File.Exists(fp))
-                ? File.GetLastWriteTimeUtc(fp).Ticks
-                : -1;
-        }
-        await HttpJson.WriteAsync(res, stamps);
     }
 }

@@ -11,5 +11,5 @@ internal sealed partial class ApiRouter
     /// it; the response is not auto-closed by the dispatcher.
     /// </summary>
     private Task HandleEventsAsync(HttpListenerRequest req, HttpListenerResponse res)
-        => _ctx!.Events.SubscribeAsync(res, default);
+        => ScopedCtx.Events.SubscribeAsync(res, default);
 }

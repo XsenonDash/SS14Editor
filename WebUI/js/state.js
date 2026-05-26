@@ -11,7 +11,6 @@ const state = {
     openFiles  : new Map(),
     currentFile: null,
     resolvedCache: new Map(),
-    fileStamps : new Map(),       // path → last-known ticks from server
     parentFileCache: new Map(),   // filePath → parsed yaml array (for inheritance lookup)
     expandedDirs: new Set(),      // tree directory paths that are currently expanded (preserved across re-renders)
     gitStatus  : null,            // { available, files: { 'rel/path.yml': 'new'|'modified'|'deleted'|'renamed'|'conflict' } }

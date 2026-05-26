@@ -51,8 +51,6 @@ const api = {
     createFolder(dir, name) { return this.post('/api/create-folder', { dir, name }); },
     renameFolder(oldPath, newName) { return this.post('/api/rename-folder', { oldPath, newName }); },
     deleteFolder(path, recursive = false) { return this.post('/api/delete-folder', { path, recursive }); },
-    fileStamps(paths) { return this.post('/api/file-stamps', { paths }); },
-    renameProtoId(path, oldId, newId, type) { return this.post('/api/rename-proto-id', { path, oldId, newId, type }); },
     gitStatus()       { return this.get('/api/git-status'); },
     status()          { return this.get('/api/status'); },
     configure(projectPath) { return this.post('/api/configure', { projectPath }); },

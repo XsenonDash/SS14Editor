@@ -337,10 +337,6 @@ async function openFile(path, targetGroupId) {
         placeholder.dirtyProtos = new Set();
         placeholder.readOnly   = !!resp.readOnly || path.startsWith('__engine__/');
         placeholder.loading    = false;
-        try {
-            const stamps = await api.fileStamps([path]);
-            if (stamps[path]) state.fileStamps.set(path, stamps[path]);
-        } catch {}
         renderTabs();
         state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));
     } catch (e) {

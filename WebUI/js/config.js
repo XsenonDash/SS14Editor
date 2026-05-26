@@ -9,5 +9,4 @@ const CFG = Object.freeze({
     autosaveDelay    : 800,
     searchDebounce   : 250,
     undoLimit        : 200,
-    fileWatchInterval: 3000,  // ms – poll interval for external file changes
 });

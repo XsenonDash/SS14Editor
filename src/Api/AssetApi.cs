@@ -10,7 +10,7 @@ internal sealed partial class ApiRouter
 {
     private async Task HandleTextureAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         if (string.IsNullOrEmpty(relPath))
         {
@@ -40,7 +40,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleTextureBrowseAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = NormalizeTexturesPath(req.QueryString["path"] ?? "");
 
         var fullPath = PathSecurity.Resolve(ctx.TexturesDir, relPath.Length == 0 ? "." : relPath);
@@ -63,7 +63,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleAudioAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         if (string.IsNullOrEmpty(relPath))
         {
@@ -93,7 +93,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleAudioBrowseAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = NormalizeAudioPath(req.QueryString["path"] ?? "");
 
         var fullPath = PathSecurity.Resolve(ctx.AudioDir, relPath.Length == 0 ? "." : relPath);
@@ -147,7 +147,7 @@ internal sealed partial class ApiRouter
     /// </summary>
     private async Task HandleResourceAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var relPath = req.QueryString["path"];
         if (string.IsNullOrEmpty(relPath))
         {
@@ -183,7 +183,7 @@ internal sealed partial class ApiRouter
     /// </summary>
     private async Task HandleResourceBrowseAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var rel = (req.QueryString["path"] ?? "").Replace('\\', '/').TrimStart('/');
         var normalized = rel.Replace('/', Path.DirectorySeparatorChar);
 

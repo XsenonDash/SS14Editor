@@ -9,7 +9,7 @@ internal sealed partial class ApiRouter
 {
     private async Task HandleCreateFolderAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var doc = await HttpJson.ReadBodyAsync(req);
         var parentDir = doc.TryGetProperty("dir", out var dirEl) ? dirEl.GetString() ?? "" : "";
         var name = doc.GetProperty("name").GetString()!;
@@ -47,7 +47,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleRenameFolderAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         var doc = await HttpJson.ReadBodyAsync(req);
         var oldRel = doc.GetProperty("oldPath").GetString()!;
         var newName = doc.GetProperty("newName").GetString()!;
@@ -89,7 +89,7 @@ internal sealed partial class ApiRouter
 
     private async Task HandleDeleteFolderAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx!;
+        var ctx = ScopedCtx;
         string? relPath = req.QueryString["path"];
         bool recursive = false;
         if (req.HttpMethod == "POST")
