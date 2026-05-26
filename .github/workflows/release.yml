@@ -108,7 +108,7 @@ jobs:
         shell: bash
         run: |
           cd electron
-          npm ci
+          npm install
           npm run dist -- --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
