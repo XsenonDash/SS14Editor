@@ -65,6 +65,7 @@ function buildCard(proto, idx, filePath) {
         if (fs && fs.yaml) {
             fs.yaml.splice(idx, 1);
             fs.doc = null;
+            fs.structuralChange = true;
             commitChange(fs);
             renderEditor();
         }
@@ -120,6 +121,7 @@ function buildCard(proto, idx, filePath) {
         const [moved] = fs.yaml.splice(from, 1);
         fs.yaml.splice(to, 0, moved);
         fs.doc = null;
+        fs.structuralChange = true;
         commitChange(fs);
         renderEditor();
     });

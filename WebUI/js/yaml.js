@@ -407,3 +407,47 @@ function _seqEntryStart(text, nodeRangeStart) {
     if (i >= 0 && text[i] === '-') return i;
     return nodeRangeStart; // fallback (should not happen in a block sequence)
 }
+
+
+/**
+ * Merge editor edits with the latest on-disk content so external edits
+ * (comments, formatting tweaks) made in another editor are preserved
+ * when autosave fires.
+ *
+ * For each proto index:
+ *   - if dirtySinceSave contains it -> re-serialize from the editor's
+ *     AST node (the user's edit wins for that proto's content),
+ *   - otherwise -> slice the raw text from diskContent (preserves any
+ *     external comments / whitespace verbatim).
+ *
+ * Returns the merged text, or 
+ull to signal "cannot merge - caller
+ * should fall back to writing the editor's own content" (e.g. structural
+ * drift, missing range info).
+ */
+function dumpYamlMergeDisk(editorYaml, editorDoc, diskContent, diskDoc, dirtySinceSave) {
+    if (!diskDoc || !YAML.isSeq(diskDoc.contents)) return null;
+    if (!editorDoc || !YAML.isSeq(editorDoc.contents)) return null;
+    const diskItems   = diskDoc.contents.items;
+    const editorItems = editorDoc.contents.items;
+    if (diskItems.length !== editorYaml.length) return null;
+    if (editorItems.length !== editorYaml.length) return null;
+    const parts = [];
+    let pos = 0;
+    for (let i = 0; i < diskItems.length; i++) {
+        const item = diskItems[i];
+        if (!item.range) return null;
+        const nodeStart = item.range[0];
+        const nodeEnd   = item.range[2];
+        const itemStart = _seqEntryStart(diskContent, nodeStart);
+        parts.push(diskContent.slice(pos, itemStart));
+        if (dirtySinceSave.has(i)) {
+            parts.push(_dumpSingleProtoFromNode(editorItems[i]));
+        } else {
+            parts.push(diskContent.slice(itemStart, nodeEnd));
+        }
+        pos = nodeEnd;
+    }
+    parts.push(diskContent.slice(pos));
+    return parts.join('');
+}

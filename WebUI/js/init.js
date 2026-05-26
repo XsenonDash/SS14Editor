@@ -112,6 +112,8 @@ function startFileEventStream() {
                 fs.yaml = protos;
                 fs.doc = doc;
                 fs.dirtyProtos = new Set();
+                fs.dirtySinceSave = new Set();
+                fs.structuralChange = false;
                 fs.history = [content];
                 fs.historyIdx = 0;
                 state.resolvedCache.clear();

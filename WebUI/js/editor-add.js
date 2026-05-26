@@ -168,6 +168,7 @@ async function copyPrototype(type, sourceId) {
     clone.id = _generateUniqueProtoId(type, sourceId);
     fs.yaml.push(clone);
     fs.doc = null;
+    fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
     const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
@@ -196,6 +197,7 @@ function addNewPrototype(type) {
     // `onParentChange` — keeping the add-item codepath intact.
     fs.yaml.push(proto);
     fs.doc = null;
+    fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
     const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);

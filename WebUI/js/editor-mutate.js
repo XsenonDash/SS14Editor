@@ -21,6 +21,7 @@ function setFieldValue(path, tag, value, filePath) {
     obj[tag] = value;
     if (fs.doc) docSetField(fs.doc, path, tag, value);
     fs.dirtyProtos?.add(path[0]);
+    fs.dirtySinceSave?.add(path[0]);
     state.resolvedCache.clear();
     commitChange(fs);
     scheduleRenderEditor();
@@ -35,6 +36,7 @@ function deleteField(path, tag, filePath) {
     delete obj[tag];
     if (fs.doc) docDeleteField(fs.doc, path, tag);
     fs.dirtyProtos?.add(path[0]);
+    fs.dirtySinceSave?.add(path[0]);
     state.resolvedCache.clear();
     commitChange(fs);
     scheduleRenderEditor();
@@ -58,12 +60,44 @@ function commitChange(fs) {
 }
 
 // ======================== AUTOSAVE =====================================
+//
+// Before writing, re-read the current disk content. If the file was edited
+// externally (e.g. comments added in VSCode) between the time it was loaded
+// here and now, dumpYamlMergeDisk weaves the editor's per-proto changes back
+// onto the fresh disk text — external comments survive autosave. Falls back
+// to writing `fs.content` verbatim when structural changes make merging
+// unsafe (proto added / deleted / reordered).
 function scheduleAutosave(fs) {
     if (fs.readOnly) return;
     clearTimeout(fs._saveTimer);
     fs._saveTimer = setTimeout(async () => {
         try {
-            await api.saveFile(fs.path, fs.content);
+            let payload = fs.content;
+            if (!fs.structuralChange && fs.doc && fs.yaml && fs.dirtySinceSave) {
+                try {
+                    const disk = await api.loadFile(fs.path);
+                    if (disk && typeof disk.content === 'string' && disk.content !== fs.content) {
+                        const { doc: diskDoc } = parseYamlDoc(disk.content);
+                        const merged = dumpYamlMergeDisk(
+                            fs.yaml, fs.doc, disk.content, diskDoc, fs.dirtySinceSave);
+                        if (merged != null) payload = merged;
+                    }
+                } catch (e) {
+                    // Re-read failure is non-fatal — fall back to fs.content.
+                    console.warn('[Editor] disk re-read failed, saving editor content as-is:', e);
+                }
+            }
+            await api.saveFile(fs.path, payload);
+            if (payload !== fs.content) {
+                // Keep in-memory state coherent with what we just wrote: re-parse
+                // the merged text so future commits use ranges aligned with disk.
+                fs.content = payload;
+                fs.history[fs.historyIdx] = payload;
+                const { doc } = parseYamlDoc(payload);
+                fs.doc = doc;
+            }
+            fs.dirtySinceSave.clear();
+            fs.structuralChange = false;
             fs.modified = false; renderTabs(); toast('Saved', 'success');
             // Refresh git decorations so the tree + tabs colour the file as
             // modified. The Ctrl+S handler does the same — autosave used to
