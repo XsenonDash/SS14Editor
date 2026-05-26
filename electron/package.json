@@ -2,6 +2,7 @@
   "name": "ss14-editor",
   "version": "1.0.0",
   "description": "SS14 Prototype Editor – desktop wrapper",
+  "author": "TheShuEd",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -59,7 +60,7 @@
     "electron-updater": "^6.3.0"
   },
   "devDependencies": {
-    "electron": "^31.0.0",
-    "electron-builder": "^24.13.0"
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
   }
 }
