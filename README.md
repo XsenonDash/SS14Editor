@@ -1,4 +1,4 @@
-# SS14 Prototype Redactor
+# SS14 Editor
 
 A standalone visual editor for [Space Station 14](https://github.com/space-wizards/space-station-14) prototype YAML files.  
 Works with **any SS14 fork** — just point it at your project folder.
