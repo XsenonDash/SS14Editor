@@ -215,28 +215,3 @@ public static class EditorServer
     }
 
 }
-
-public sealed class FileTreeNode
-{
-    public string Name { get; set; } = "";
-    public string Path { get; set; } = "";
-    public bool IsDir { get; set; }
-    public bool ReadOnly { get; set; }
-    public List<FileTreeNode>? Children { get; set; }
-}
-
-public sealed class ProtoIndexEntry
-{
-    public string Id { get; set; } = "";
-    public string? Name { get; set; }
-    public string File { get; set; } = "";
-    public string[]? Parents { get; set; }
-    public bool Abstract { get; set; }
-    public bool ReadOnly { get; set; }
-}
-
-public sealed class ProtoSearchResult
-{
-    public string Id { get; set; } = "";
-    public string? Name { get; set; }
-}

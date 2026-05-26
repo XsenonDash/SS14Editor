@@ -15,6 +15,9 @@ internal sealed class ProtoIndexService
     private readonly string _prototypesDir;
     private readonly string _enginePrototypesDir;
     private Dictionary<string, List<ProtoIndexEntry>> _index = new();
+    // Reverse map: relative path -> list of (typeKey, entry) so RefreshFile is
+    // O(entries-in-file) instead of O(types × entries) on every save.
+    private Dictionary<string, List<(string Type, ProtoIndexEntry Entry)>> _byFile = new();
 
     public const string EnginePrefix = "__engine__/";
 
@@ -41,6 +44,7 @@ internal sealed class ProtoIndexService
             }
         }
         _index = idx;
+        _byFile = BuildReverseMap(idx);
     }
 
     /// <summary>
@@ -49,11 +53,41 @@ internal sealed class ProtoIndexService
     /// </summary>
     public void RefreshFile(string fullPath, string relativePath)
     {
-        foreach (var list in _index.Values)
-            list.RemoveAll(e => e.File == relativePath);
+        // Targeted removal via reverse map: O(entries_in_file).
+        if (_byFile.TryGetValue(relativePath, out var prev))
+        {
+            foreach (var (type, entry) in prev)
+            {
+                if (_index.TryGetValue(type, out var list))
+                {
+                    list.Remove(entry);
+                    if (list.Count == 0) _index.Remove(type);
+                }
+            }
+            _byFile.Remove(relativePath);
+        }
 
-        try { YamlPrototypeScanner.Scan(fullPath, relativePath, _index); }
-        catch { /* ignore */ }
+        // Scan into a temp dict so we can both merge into _index and
+        // populate the reverse map for the new entries in one pass.
+        var scanned = new Dictionary<string, List<ProtoIndexEntry>>();
+        try { YamlPrototypeScanner.Scan(fullPath, relativePath, scanned); }
+        catch { return; }
+
+        List<(string, ProtoIndexEntry)>? reverse = null;
+        foreach (var (type, entries) in scanned)
+        {
+            if (!_index.TryGetValue(type, out var dest))
+            {
+                dest = new List<ProtoIndexEntry>();
+                _index[type] = dest;
+            }
+            foreach (var entry in entries)
+            {
+                dest.Add(entry);
+                (reverse ??= new()).Add((type, entry));
+            }
+        }
+        if (reverse != null) _byFile[relativePath] = reverse;
     }
 
     public List<ProtoSearchResult> Search(string type, string query, int limit)
@@ -109,5 +143,24 @@ internal sealed class ProtoIndexService
             catch { /* skip unreadable */ }
         }
         return index;
+    }
+
+    private static Dictionary<string, List<(string Type, ProtoIndexEntry Entry)>> BuildReverseMap(
+        Dictionary<string, List<ProtoIndexEntry>> index)
+    {
+        var map = new Dictionary<string, List<(string, ProtoIndexEntry)>>();
+        foreach (var (type, entries) in index)
+        {
+            foreach (var entry in entries)
+            {
+                if (!map.TryGetValue(entry.File, out var list))
+                {
+                    list = new List<(string, ProtoIndexEntry)>();
+                    map[entry.File] = list;
+                }
+                list.Add((type, entry));
+            }
+        }
+        return map;
     }
 }

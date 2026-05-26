@@ -11,8 +11,8 @@ applyTo: "src/Api/**/*.cs"
 |------|-----------|
 | [ApiRouter.cs](../../src/Api/ApiRouter.cs) | dispatcher + route registration table (no handlers) |
 | [StatusApi.cs](../../src/Api/StatusApi.cs) | `/api/status`, `/api/configure` |
-| [TreeApi.cs](../../src/Api/TreeApi.cs) | `/api/tree`, `/api/metadata`, `/api/proto-index`, `/api/search-protos`, `/api/refresh-index`, `/api/rename-proto-id` |
-| [FileApi.cs](../../src/Api/FileApi.cs) | `/api/file`, `/api/rename-file`, `/api/delete-file`, `/api/create-file`, `/api/file-stamps` |
+| [TreeApi.cs](../../src/Api/TreeApi.cs) | `/api/tree`, `/api/metadata`, `/api/proto-index`, `/api/search-protos`, `/api/refresh-index` |
+| [FileApi.cs](../../src/Api/FileApi.cs) | `/api/file`, `/api/rename-file`, `/api/delete-file`, `/api/create-file` |
 | [FolderApi.cs](../../src/Api/FolderApi.cs) | `/api/create-folder`, `/api/rename-folder`, `/api/delete-folder` |
 | [AssetApi.cs](../../src/Api/AssetApi.cs) | `/api/texture`, `/api/texture-browse`, `/api/audio`, `/api/audio-browse` |
 | [SourceApi.cs](../../src/Api/SourceApi.cs) | `/api/open-in-explorer`, `/api/open-default`, `/api/open-source` |

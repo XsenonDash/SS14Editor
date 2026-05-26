@@ -1,0 +1,252 @@
+// ======================================================================
+//  SS14 Prototype Editor – Components Section
+// ======================================================================
+//  Per-prototype components: block, the add-component modal,
+//  individual compCard widgets, and component localization (copying an
+//  inherited component to local YAML on first edit).
+// ======================================================================
+
+'use strict';
+
+function buildComponentsSection(proto, protoIdx, inherited, filePath) {
+    const sec = _div('components-section');
+    sec.innerHTML = `<div class="components-header"><span>components</span><button class="add-component-btn" title="Add component">+</button></div>`;
+    sec.querySelector('.add-component-btn').addEventListener('click', () => showAddComponentModal(proto, protoIdx, filePath));
+
+    const localComps = proto.components || [];
+    const inhComps   = inherited.components || [];
+    // The components-section behaves like a single "row" at the proto-body
+    // level: it carries `field-local` when this prototype actually defines
+    // local components, otherwise `inherited`. That puts it on the same
+    // visibility codepath as every other row inside `.proto-body`
+    // (collapsed cards hide non-`.field-local` children uniformly).
+    sec.classList.add(localComps.length > 0 ? 'field-local' : 'inherited');
+    // Reset button: drop the whole local `components:` block, falling back
+    // to the inherited list. Same affordance as the per-field reset (↺).
+    if (localComps.length > 0) {
+        const reset = _el('button');
+        reset.className = 'field-reset-btn';
+        reset.textContent = '↺';
+        reset.title = 'Reset components (revert to inherited)';
+        reset.addEventListener('click', e => {
+            e.stopPropagation();
+            const fs = state.openFiles.get(filePath);
+            if (!fs || !fs.yaml[protoIdx]) return;
+            delete fs.yaml[protoIdx].components;
+            state.resolvedCache.clear();
+            commitChange(fs); renderEditor();
+        });
+        sec.querySelector('.components-header').appendChild(reset);
+    }
+    const localMap = new Map();
+    localComps.forEach((c, i) => { if (c && c.type) localMap.set(c.type, { data: c, idx: i }); });
+    const inhMap = new Map();
+    for (const c of inhComps) { if (c && c.type && !localMap.has(c.type)) inhMap.set(c.type, c); }
+
+    for (const [ct, { data, idx }] of localMap) sec.appendChild(compCard(ct, data, false, protoIdx, idx, inherited, undefined, filePath));
+    for (const [ct, data]          of inhMap)   sec.appendChild(compCard(ct, data, true,  protoIdx, -1, inherited, undefined, filePath));
+    return sec;
+}
+
+function showAddComponentModal(proto, protoIdx, filePath) {
+    const existing = new Set((proto.components || []).map(c => c?.type).filter(Boolean));
+    if (proto.parent) {
+        const inh = resolveInheritance(proto.type, proto.parent);
+        if (inh?.components) for (const c of inh.components) { if (c?.type) existing.add(c.type); }
+    }
+    pickComponentType(existing, (t) => {
+        const fs = state.openFiles.get(filePath ?? state.currentFile);
+        if (!fs || !fs.yaml[protoIdx]) return;
+        if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
+        fs.yaml[protoIdx].components.push({ type: t });
+        commitChange(fs); renderEditor();
+    });
+}
+
+/**
+ * Generic component-type picker modal. Used by the prototype components:
+ * block AND by the ComponentRegistry field control. `excludeSet` is a
+ * Set of component-type strings that should not appear in the list
+ * (already-present components). `onPick(type)` is invoked when the user
+ * selects a row.
+ */
+function pickComponentType(excludeSet, onPick) {
+    const overlay = _div('modal-overlay');
+    const modal = _div('modal');
+    modal.innerHTML = `<div class="modal-header"><h3>Add Component</h3><button class="modal-close">\u00d7</button></div>
+        <div class="modal-body">
+            <input type="text" class="field-input modal-search" placeholder="Search component\u2026" autocomplete="off">
+            <div class="modal-list"></div>
+        </div>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const searchInp = modal.querySelector('.modal-search');
+    const listEl = modal.querySelector('.modal-list');
+    const types = state.metadata?.components ? Object.keys(state.metadata.components).sort().filter(t => !excludeSet.has(t)) : [];
+
+    function renderList(q) {
+        listEl.innerHTML = '';
+        const filtered = types.filter(t => smartMatch(t, q));
+        if (!filtered.length) { listEl.innerHTML = '<div class="dropdown-empty">No components found</div>'; return; }
+        for (const t of filtered.slice(0, 100)) {
+            const el = _div('modal-list-item');
+            el.textContent = t;
+            el.addEventListener('click', () => { overlay.remove(); onPick(t); });
+            listEl.appendChild(el);
+        }
+    }
+    renderList('');
+    searchInp.addEventListener('input', () => renderList(searchInp.value));
+    searchInp.focus();
+    modal.querySelector('.modal-close').addEventListener('click', () => overlay.remove());
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+/** Copy an inherited component to local YAML so it can be edited. Returns new compIdx. */
+function localizeComponent(protoIdx, compType, filePath) {
+    const fs = state.openFiles.get(filePath ?? state.currentFile);
+    if (!fs || !fs.yaml[protoIdx]) return -1;
+    if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
+    // Check if already localized
+    const existing = fs.yaml[protoIdx].components.findIndex(c => c && c.type === compType);
+    if (existing >= 0) return existing;
+    fs.yaml[protoIdx].components.push({ type: compType });
+    return fs.yaml[protoIdx].components.length - 1;
+}
+
+function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, filePath) {
+    // `ctx` (optional) decouples this card from prototype state so it can
+    // also be used by the ComponentRegistry field control. When provided,
+    // it intercepts mutations: { write(tag, value), reset(tag), remove(),
+    // localize() -> newIdx }. Inheritance UI is suppressed in ctx mode
+    // because a ComponentRegistry has no parent chain.
+    if (ctx) isInh = false;
+    // Default to collapsed for every component (inherited or local). Only
+    // overridden field rows show until the user expands via the eye icon.
+    const startCollapsed = true;
+    // A local component that ALSO exists in the inherited chain is an
+    // override – the `×` action effectively *resets* it to the inherited
+    // value rather than truly deleting it. Surface that distinction in
+    // the icon/tooltip so the design matches plain field rows (↺ for
+    // override-reset, × for outright remove).
+    const isOverride = !isInh && !ctx && Array.isArray(inherited?.components)
+        && inherited.components.some(c => c && c.type === compType);
+    const card = _div('component-card' + (startCollapsed ? ' collapsed' : '') + (isInh ? ' inherited' : ' comp-local'));
+    const cMeta = state.metadata?.components?.[compType];
+    const hdr = _div('component-header');
+    hdr.innerHTML = `<span class="component-type" title="${esc(cMeta?.summary || '')}">${esc(compType)}</span>`;
+    // Eye-icon collapse toggle, right after the component name. The reset
+    // / remove button (when present) appears AFTER the eye, matching the
+    // field-row pattern "label: data [eye] [reset/delete]".
+    hdr.appendChild(buildCollapseBtn(() => card));
+    if (!isInh && compIdx >= 0) {
+        const rmBtn = _el('button');
+        rmBtn.className = 'field-reset-btn comp-remove-btn';
+        if (isOverride) {
+            rmBtn.title = 'Reset to inherited value';
+            rmBtn.textContent = '↺';
+        } else {
+            rmBtn.title = 'Remove component';
+            rmBtn.textContent = '×';
+        }
+        rmBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            if (ctx) { ctx.remove(); return; }
+            const fs = state.openFiles.get(filePath ?? state.currentFile);
+            if (fs && fs.yaml[protoIdx]?.components) {
+                fs.yaml[protoIdx].components.splice(compIdx, 1);
+                commitChange(fs); renderEditor();
+            }
+        });
+        hdr.appendChild(rmBtn);
+    }
+    hdr.addEventListener('contextmenu', e => {
+        e.preventDefault(); e.stopPropagation();
+        const items = [];
+        if (cMeta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(cMeta.className) });
+        if (!isInh && compIdx >= 0) {
+            items.push('---', { label: isOverride ? 'Reset to inherited' : 'Remove component', danger: !isOverride, action: () => {
+                if (ctx) { ctx.remove(); return; }
+                const fs = state.openFiles.get(filePath ?? state.currentFile);
+                if (fs && fs.yaml[protoIdx]?.components) {
+                    fs.yaml[protoIdx].components.splice(compIdx, 1);
+                    commitChange(fs); renderEditor();
+                }
+            }});
+        }
+        items.push('---');
+        items.push({ label: 'Collapse all components', action: () => collapseAllComponents(true) });
+        items.push({ label: 'Expand all components', action: () => collapseAllComponents(false) });
+        if (items.length) showContextMenu(e.clientX, e.clientY, items);
+    });
+    card.appendChild(hdr);
+
+    const body = _div('component-body');
+    const renderedTags = new Set(['type']);
+
+    // Find inherited component data for this specific component type
+    let inhCompData = {};
+    if (inherited && inherited.components) {
+        const inhC = (Array.isArray(inherited.components) ? inherited.components : [])
+            .find(c => c && c.type === compType);
+        if (inhC) inhCompData = inhC;
+    }
+
+    // For inherited components, editing any field "localizes" the component first
+    function compOnChange(tag, nv) {
+        if (ctx) { ctx.write(tag, nv); return; }
+        if (isInh) {
+            const newIdx = localizeComponent(protoIdx, compType, filePath);
+            if (newIdx < 0) return;
+            setFieldValue([protoIdx, 'components', newIdx], tag, nv, filePath);
+        } else {
+            setFieldValue([protoIdx, 'components', compIdx], tag, nv, filePath);
+        }
+    }
+    function compOnReset(tag) {
+        if (ctx) { ctx.reset(tag); return; }
+        if (!isInh && compIdx >= 0) deleteField([protoIdx, 'components', compIdx], tag, filePath);
+    }
+
+    if (cMeta) {
+        for (const f of cMeta.fields) {
+            renderedTags.add(f.tag);
+
+            let source, value;
+            if (isInh) {
+                source = 'inherited';
+                value = data[f.tag];
+            } else if (Object.prototype.hasOwnProperty.call(data, f.tag)) {
+                source = 'local';
+                value = data[f.tag];
+            } else if (inhCompData[f.tag] !== undefined) {
+                source = 'inherited';
+                value = inhCompData[f.tag];
+            } else {
+                source = 'default';
+                value = f.default;
+            }
+
+            const onReset = (!isInh && source === 'local') ? () => compOnReset(f.tag) : null;
+            body.appendChild(fieldRow(f.tag, f, value, source, nv => compOnChange(f.tag, nv), onReset));
+        }
+    }
+
+    // Extra fields in YAML not in metadata
+    for (const [k, v] of Object.entries(data)) {
+        if (k === 'type' || k.startsWith('__') || renderedTags.has(k)) continue;
+        const source = isInh ? 'inherited' : 'local';
+        const onReset = (!isInh) ? () => compOnReset(k) : null;
+        body.appendChild(genericRow(k, v, source, nv => compOnChange(k, nv), onReset));
+    }
+
+    card.appendChild(body);
+    return card;
+}
+
+function collapseAllComponents(collapse) {
+    document.querySelectorAll('.group-content .component-card').forEach(card => {
+        card.classList.toggle('collapsed', collapse);
+    });
+}
