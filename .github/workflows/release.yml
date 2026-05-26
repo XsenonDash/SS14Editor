@@ -45,7 +45,7 @@ jobs:
       - name: Publish self-contained
         shell: bash
         run: |
-          dotnet publish ss14-redactor.csproj \
+          dotnet publish ss14-editor.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
             --self-contained true \
@@ -58,7 +58,7 @@ jobs:
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          $name = "ss14-redactor-${{ matrix.rid }}.zip"
+          $name = "ss14-editor-${{ matrix.rid }}.zip"
           Compress-Archive -Path "publish/${{ matrix.rid }}/*" -DestinationPath $name
           echo "ARTIFACT=$name" >> $env:GITHUB_ENV
 
@@ -66,15 +66,15 @@ jobs:
         if: matrix.archive == 'tar'
         shell: bash
         run: |
-          name="ss14-redactor-${{ matrix.rid }}.tar.gz"
-          chmod +x publish/${{ matrix.rid }}/ss14-redactor || true
+          name="ss14-editor-${{ matrix.rid }}.tar.gz"
+          chmod +x publish/${{ matrix.rid }}/ss14-editor || true
           tar -czf "$name" -C publish/${{ matrix.rid }} .
           echo "ARTIFACT=$name" >> $GITHUB_ENV
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ss14-redactor-${{ matrix.rid }}
+          name: ss14-editor-${{ matrix.rid }}
           path: ${{ env.ARTIFACT }}
           retention-days: 7
 
