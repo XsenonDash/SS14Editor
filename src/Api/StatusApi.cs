@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Content.Editor.Editor;
@@ -168,5 +169,108 @@ internal sealed partial class ApiRouter
     {
         SwapContext(null);
         return HttpJson.WriteAsync(res, new { ok = true });
+    }
+
+    // -----------------------------------------------------------------------
+    // Recent projects: persisted on disk under %LOCALAPPDATA%/ss14-editor/
+    // so the list survives localStorage being wiped, the user switching
+    // between the Electron app and a browser, or a fresh reinstall that
+    // preserves AppData. GET returns the list, POST {path} prepends.
+    // -----------------------------------------------------------------------
+    private static string RecentProjectsFile()
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var dir = Path.Combine(appData, "ss14-editor");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, "recent-projects.json");
+    }
+
+    private static readonly SemaphoreSlim _recentGate = new(1, 1);
+    private const int RecentProjectsLimit = 10;
+
+    private async Task HandleRecentProjectsAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        var file = RecentProjectsFile();
+
+        if (string.Equals(req.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
+        {
+            await _recentGate.WaitAsync();
+            try
+            {
+                var list = ReadRecent(file);
+                await HttpJson.WriteAsync(res, new { items = list });
+            }
+            finally { _recentGate.Release(); }
+            return;
+        }
+
+        if (string.Equals(req.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
+        {
+            var doc = await HttpJson.ReadBodyAsync(req);
+
+            // POST {path, remove:true} removes; POST {path} prepends; POST {clear:true} wipes.
+            string? path = doc.TryGetProperty("path", out var pe) ? pe.GetString() : null;
+            bool remove = doc.TryGetProperty("remove", out var re) && re.ValueKind == System.Text.Json.JsonValueKind.True;
+            bool clear  = doc.TryGetProperty("clear",  out var ce) && ce.ValueKind == System.Text.Json.JsonValueKind.True;
+
+            await _recentGate.WaitAsync();
+            try
+            {
+                var list = clear ? new System.Collections.Generic.List<RecentProject>() : ReadRecent(file);
+
+                if (!clear)
+                {
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        await HttpJson.WriteErrorAsync(res, 400, "Missing 'path'");
+                        return;
+                    }
+                    list.RemoveAll(x => string.Equals(x.path, path, StringComparison.OrdinalIgnoreCase));
+                    if (!remove)
+                    {
+                        list.Insert(0, new RecentProject { path = path!, lastUsed = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() });
+                        if (list.Count > RecentProjectsLimit) list.RemoveRange(RecentProjectsLimit, list.Count - RecentProjectsLimit);
+                    }
+                }
+
+                WriteRecent(file, list);
+                await HttpJson.WriteAsync(res, new { items = list });
+            }
+            finally { _recentGate.Release(); }
+            return;
+        }
+
+        await HttpJson.WriteErrorAsync(res, 405, "Method not allowed");
+    }
+
+    private sealed class RecentProject
+    {
+        public string path { get; set; } = string.Empty;
+        public long lastUsed { get; set; }
+    }
+
+    private static System.Collections.Generic.List<RecentProject> ReadRecent(string file)
+    {
+        if (!File.Exists(file)) return new();
+        try
+        {
+            var json = File.ReadAllText(file);
+            var list = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<RecentProject>>(json);
+            return list ?? new();
+        }
+        catch { return new(); }
+    }
+
+    private static void WriteRecent(string file, System.Collections.Generic.List<RecentProject> list)
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(list);
+            File.WriteAllText(file, json);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Failed to write recent projects: {ex.Message}");
+        }
     }
 }

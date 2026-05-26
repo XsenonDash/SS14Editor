@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
@@ -18,8 +19,16 @@ internal sealed class FileWatcherService : IDisposable
 {
     private readonly string _root;
     private readonly FileSystemWatcher _watcher;
-    private readonly ConcurrentDictionary<string, Timer> _pending = new();
+    // _pending is guarded by _pendingLock. We do NOT use ConcurrentDictionary
+    // here because the Schedule/Fire interleaving needs atomicity larger than
+    // a single dictionary operation: Fire removes the entry then disposes the
+    // timer, while a concurrent Schedule may still be holding a reference and
+    // about to call Timer.Change() on it. Without the lock, the Change() call
+    // would throw ObjectDisposedException on the disposed instance.
+    private readonly Dictionary<string, Timer> _pending = new();
+    private readonly object _pendingLock = new();
     private readonly ConcurrentDictionary<string, DateTime> _suppress = new();
+    private bool _disposed;
     private static readonly TimeSpan DebounceDelay = TimeSpan.FromMilliseconds(250);
     private static readonly TimeSpan SuppressWindow = TimeSpan.FromSeconds(5);
 
@@ -63,35 +72,41 @@ internal sealed class FileWatcherService : IDisposable
     private void Schedule(string fullPath, FileChangeKind kind)
     {
         var canonical = Path.GetFullPath(fullPath);
-        // A single editor write usually produces several FileSystemWatcher
-        // events (Created+Changed, or multiple Changed).  Keep the suppression
-        // timestamp until the window elapses so every event in that burst is
-        // filtered, not just the first one.
+        // Editor's own writes call SuppressNext(). One incoming FSW event for
+        // that path is consumed here so the WebUI doesn't see a self-induced
+        // "external change" toast. Subsequent FSW events for the same path
+        // (e.g. a real external edit later) are NOT blocked because the stamp
+        // is removed after the first match.
         if (_suppress.TryGetValue(canonical, out var suppressedAt))
         {
-            // One-shot: consume the stamp immediately so only the first
-            // echo event from our own write is suppressed.  External changes
-            // (git checkout, revert, etc.) that arrive after the first echo
-            // are no longer blocked by a stale suppress window.
             _suppress.TryRemove(canonical, out _);
             if (DateTime.UtcNow - suppressedAt < SuppressWindow)
                 return;
         }
 
-        _pending.AddOrUpdate(
-            canonical,
-            _ => new Timer(_ => Fire(canonical, kind), null, DebounceDelay, Timeout.InfiniteTimeSpan),
-            (_, existing) =>
+        lock (_pendingLock)
+        {
+            if (_disposed) return;
+            if (_pending.TryGetValue(canonical, out var existing))
             {
+                // Still owned by the dictionary, safe to reschedule.
                 existing.Change(DebounceDelay, Timeout.InfiniteTimeSpan);
-                return existing;
-            });
+            }
+            else
+            {
+                _pending[canonical] = new Timer(_ => Fire(canonical, kind), null, DebounceDelay, Timeout.InfiniteTimeSpan);
+            }
+        }
     }
 
     private void Fire(string fullPath, FileChangeKind kind)
     {
-        if (_pending.TryRemove(fullPath, out var timer))
-            timer.Dispose();
+        Timer? timer;
+        lock (_pendingLock)
+        {
+            if (!_pending.Remove(fullPath, out timer)) return;
+        }
+        timer.Dispose();
 
         string rel;
         try
@@ -119,8 +134,12 @@ internal sealed class FileWatcherService : IDisposable
     {
         _watcher.EnableRaisingEvents = false;
         _watcher.Dispose();
-        foreach (var (_, timer) in _pending) timer.Dispose();
-        _pending.Clear();
+        lock (_pendingLock)
+        {
+            _disposed = true;
+            foreach (var (_, timer) in _pending) timer.Dispose();
+            _pending.Clear();
+        }
     }
 }
 

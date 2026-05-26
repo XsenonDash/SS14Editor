@@ -133,10 +133,24 @@ function startFileEventStream() {
 }
 
 // ======================== INIT =========================================
-(async function init() {
+// NOTE: `init()` is defined here but INVOKED at the bottom of this file
+// (see the trailing `init();` call). It must run after the `const HISTORY_KEY`
+// / `let _historyCache` declarations below — calling it as an IIFE here
+// would hit a temporal-dead-zone ReferenceError inside `showSetupOverlay()
+// → loadHistorySync()`, which silently rejects the async IIFE and leaves
+// the setup overlay's Browse/Open buttons with no event listeners attached.
+async function init() {
     console.log('[Editor] Initializing...');
 
-    // ---- Step 1: check whether a project is already configured -----------
+    // Show the setup overlay SYNCHRONOUSLY before we await any network call.
+    // Otherwise the renderer paints the empty editor shell first, then the
+    // overlay pops in once `api.status()` resolves — which looks broken
+    // (the user sees a non-functional editor for a few hundred ms).
+    // `showSetupOverlay()` wires up all input listeners synchronously; if
+    // we discover below that a project is already configured we just hide
+    // the overlay again before loading editor data.
+    showSetupOverlay();
+
     let status;
     try { status = await api.status(); }
     catch (e) { status = { configured: false }; }
@@ -145,13 +159,18 @@ function startFileEventStream() {
     if (versionEl && status.version) versionEl.textContent = 'v' + status.version;
 
     if (!status.configured) {
-        showSetupOverlay();
-        return; // editor loads after successful configure
+        // Overlay is already visible — nothing more to do until the user
+        // picks a project and `tryOpen` calls `loadEditorData()`.
+        return;
     }
 
-    // ---- Step 2: project is configured — load editor data ---------------
+    // Project is already configured (rare in Electron, common when running
+    // the .NET server directly with `serve <path>`): hide the overlay we
+    // pre-displayed and load editor data.
+    const overlay = document.getElementById('setup-overlay');
+    if (overlay) overlay.style.display = 'none';
     await loadEditorData();
-})();
+}
 
 // ======================== OPEN OTHER REPO =============================
 function openOtherRepository() {
@@ -177,72 +196,122 @@ function openOtherRepository() {
 }
 
 // ======================== SETUP OVERLAY ================================
+// Recent projects are persisted on the server at
+// %LOCALAPPDATA%/ss14-editor/recent-projects.json (see HandleRecentProjectsAsync
+// in src/Api/StatusApi.cs). The on-disk file is the source of truth — it
+// survives localStorage being wiped (Electron data:URL splash → localhost
+// navigation can isolate storage), browser cache clears, and reinstalls
+// that keep AppData. localStorage is kept as a synchronous fallback cache
+// so the list renders instantly while the server fetch is in flight.
 const HISTORY_KEY = 'ss14-editor-history';
+let _historyCache = null;
 
-function loadHistory() {
+function loadHistorySync() {
+    if (_historyCache) return _historyCache;
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); }
     catch { return []; }
 }
 
-function saveHistory(h) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+function cacheHistory(h) {
+    _historyCache = h;
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(h)); } catch { /* quota */ }
 }
 
-function addToHistory(path) {
-    const h = loadHistory().filter(e => e.path !== path);
-    h.unshift({ path, lastUsed: Date.now() });
-    saveHistory(h.slice(0, 10));
+async function loadHistory() {
+    try {
+        const r = await api.getRecentProjects();
+        const items = Array.isArray(r?.items) ? r.items : [];
+        // First run after upgrade: migrate localStorage entries into the server.
+        if (items.length === 0) {
+            const local = loadHistorySync();
+            if (local.length > 0) {
+                for (let i = local.length - 1; i >= 0; i--) {
+                    try { await api.addRecentProject(local[i].path); } catch { /* ignore */ }
+                }
+                const r2 = await api.getRecentProjects();
+                const items2 = Array.isArray(r2?.items) ? r2.items : [];
+                cacheHistory(items2);
+                return items2;
+            }
+        }
+        cacheHistory(items);
+        return items;
+    } catch (e) {
+        console.warn('[history] server fetch failed, using localStorage', e);
+        return loadHistorySync();
+    }
 }
 
-function removeFromHistory(path) {
-    saveHistory(loadHistory().filter(e => e.path !== path));
+async function addToHistory(path) {
+    try {
+        const r = await api.addRecentProject(path);
+        if (Array.isArray(r?.items)) cacheHistory(r.items);
+    } catch (e) {
+        console.warn('[history] server add failed', e);
+        const h = loadHistorySync().filter(e => e.path !== path);
+        h.unshift({ path, lastUsed: Date.now() });
+        cacheHistory(h.slice(0, 10));
+    }
 }
 
-function renderHistoryList(input, tryOpen) {
+async function removeFromHistory(path) {
+    try {
+        const r = await api.removeRecentProject(path);
+        if (Array.isArray(r?.items)) cacheHistory(r.items);
+    } catch (e) {
+        console.warn('[history] server remove failed', e);
+        cacheHistory(loadHistorySync().filter(e => e.path !== path));
+    }
+}
+
+async function renderHistoryList(input, tryOpen) {
     const histEl = document.getElementById('setup-history');
     if (!histEl) return;
-    const h = loadHistory();
-    histEl.innerHTML = '';
-    if (h.length === 0) return;
 
-    const label = document.createElement('div');
-    label.className = 'setup-history-label';
-    label.textContent = 'Recent projects';
-    histEl.appendChild(label);
+    const draw = (h) => {
+        histEl.innerHTML = '';
+        if (!h || h.length === 0) return;
 
-    h.forEach(({ path }) => {
-        const item = document.createElement('div');
-        item.className = 'setup-history-item';
+        const label = document.createElement('div');
+        label.className = 'setup-history-label';
+        label.textContent = 'Recent projects';
+        histEl.appendChild(label);
 
-        const text = document.createElement('span');
-        text.className = 'setup-history-path';
-        // <bdi> isolates the LTR path content inside the rtl-direction
-        // parent so that text-overflow:ellipsis clips at the START of the
-        // string (showing the differentiating tail of long shared-prefix
-        // paths) while the path itself still reads left-to-right.
-        const bdi = document.createElement('bdi');
-        bdi.textContent = path;
-        text.appendChild(bdi);
-        text.title = path;
-        text.addEventListener('click', () => {
-            input.value = path;
-            tryOpen();
+        h.forEach(({ path }) => {
+            const item = document.createElement('div');
+            item.className = 'setup-history-item';
+
+            const text = document.createElement('span');
+            text.className = 'setup-history-path';
+            const bdi = document.createElement('bdi');
+            bdi.textContent = path;
+            text.appendChild(bdi);
+            text.title = path;
+            text.addEventListener('click', () => {
+                input.value = path;
+                tryOpen();
+            });
+
+            const remove = document.createElement('button');
+            remove.className = 'setup-history-remove';
+            remove.textContent = '×';
+            remove.title = 'Remove from history';
+            remove.addEventListener('click', async e => {
+                e.stopPropagation();
+                await removeFromHistory(path);
+                renderHistoryList(input, tryOpen);
+            });
+
+            item.appendChild(text);
+            item.appendChild(remove);
+            histEl.appendChild(item);
         });
+    };
 
-        const remove = document.createElement('button');
-        remove.className = 'setup-history-remove';
-        remove.textContent = '×';
-        remove.title = 'Remove from history';
-        remove.addEventListener('click', e => {
-            e.stopPropagation();
-            removeFromHistory(path);
-            renderHistoryList(input, tryOpen);
-        });
-
-        item.appendChild(text);
-        item.appendChild(remove);
-        histEl.appendChild(item);
-    });
+    // Render cached list immediately for snappy UX, then refresh from server.
+    draw(loadHistorySync());
+    const fresh = await loadHistory();
+    draw(fresh);
 }
 
 function showSetupOverlay() {
@@ -254,9 +323,14 @@ function showSetupOverlay() {
     const browseBtn = document.getElementById('setup-browse-btn');
     const input = document.getElementById('setup-path');
 
-    // Pre-fill with most recent path
-    const h = loadHistory();
-    if (h.length > 0) input.value = h[0].path;
+    // Pre-fill with the most recent path from the synchronous cache so the
+    // input isn't empty for a frame; the async render below corrects it if
+    // the server-side list differs.
+    const cached = loadHistorySync();
+    if (cached.length > 0) input.value = cached[0].path;
+    loadHistory().then(h => {
+        if (h.length > 0 && !input.value) input.value = h[0].path;
+    });
 
     function setStatusLoading(msg) {
         statusEl.className = 'setup-status loading';
@@ -288,7 +362,7 @@ function showSetupOverlay() {
         try {
             const result = await api.configure(path);
             if (result.success) {
-                addToHistory(path);
+                await addToHistory(path);
                 overlay.style.display = 'none';
                 clearStatus();
                 toast(`Project opened: ${result.prototypes} prototypes (${result.typeCount} types)`, 'success');
@@ -415,3 +489,6 @@ async function loadEditorData() {
         toast('Ready', 'success');
     }
 }
+
+// All function/const/let declarations above are now in scope — safe to run.
+init();

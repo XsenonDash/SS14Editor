@@ -70,7 +70,144 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ======================== Layout ======================== */
-#app { display: flex; height: calc(100vh - 22px); }
+/* Total chrome above and below #app:
+     36px custom header  +  22px status bar  =  58px */
+#app { display: flex; height: calc(100vh - 22px - 36px); }
+
+/* ======================== App Header ==================== */
+#app-header {
+    height: 36px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: stretch;
+    padding: 0 0 0 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    user-select: none;
+    -webkit-app-region: drag; /* let users drag the window via empty header area */
+    position: relative;
+    z-index: 900;
+}
+.app-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-right: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.app-header-brand-icon { width: 18px; height: 18px; object-fit: contain; display: block; }
+.app-header-brand-text { letter-spacing: 0.01em; }
+.app-header-menus {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    -webkit-app-region: no-drag;
+}
+.app-header-menu { position: relative; display: flex; align-items: stretch; }
+.app-header-menu-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0 12px;
+    cursor: pointer;
+    font: inherit;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+}
+.app-header-menu-btn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+.app-header-menu.open > .app-header-menu-btn { background: var(--bg-surface-active); color: var(--text-primary); }
+.app-header-menu-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 220px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    padding: 4px;
+    z-index: 901;
+}
+.app-header-menu.open > .app-header-menu-dropdown { display: block; }
+.app-header-dropdown-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font: inherit;
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+.app-header-dropdown-item:hover { background: var(--bg-surface-hover); }
+.app-header-spacer { flex: 1; }
+.app-header-update {
+    -webkit-app-region: no-drag;
+    align-self: center;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0 14px;
+    height: 24px;
+    margin-left: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 8px rgba(88, 101, 242, 0.45);
+    transition: background 0.15s ease;
+}
+.app-header-update:hover { background: var(--accent-hover); }
+.app-header-update[disabled] { cursor: progress; opacity: 0.9; }
+.app-header-update[hidden],
+.app-header-window-controls[hidden] { display: none !important; }
+.app-header-update-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: app-header-spin 0.8s linear infinite;
+}
+@keyframes app-header-spin { to { transform: rotate(360deg); } }
+
+/* ---- Window controls (frameless BrowserWindow) ---- */
+.app-header-window-controls {
+    display: flex;
+    align-items: stretch;
+    height: 100%;
+    margin-left: 8px;
+    -webkit-app-region: no-drag;
+}
+.app-header-winbtn {
+    width: 46px;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+.app-header-winbtn:hover { background: var(--bg-surface-hover); color: var(--text-primary); }
+.app-header-winbtn:active { background: var(--bg-surface-active); }
+.app-header-winbtn-close:hover { background: #e81123; color: #fff; }
+.app-header-winbtn .ico-restore { display: none; }
+body.is-maximized .app-header-winbtn .ico-max { display: none; }
+body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 
 /* ======================== Status Bar ==================== */
 #status-bar {
@@ -1716,8 +1853,8 @@ body {
     text-align: center;
 }
 .setup-logo {
-    font-size: 48px; line-height: 1;
-    color: var(--accent); margin-bottom: 12px;
+    width: 56px; height: 56px; object-fit: contain;
+    display: block; margin: 0 auto 12px auto;
 }
 .setup-title {
     font-size: 20px; font-weight: 600;

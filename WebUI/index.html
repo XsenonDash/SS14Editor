@@ -10,6 +10,43 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
 <body>
+    <!-- Custom application header (replaces the native Electron menu bar
+         AND the native window chrome — the BrowserWindow is frameless and
+         this header carries the drag region plus minimize/maximize/close
+         controls on the right). Lives outside #app so it spans full width. -->
+    <header id="app-header">
+        <div class="app-header-brand">
+            <img class="app-header-brand-icon" src="img/icon.png" alt="" draggable="false">
+            <span class="app-header-brand-text">SS14 Editor</span>
+        </div>
+        <nav class="app-header-menus">
+            <div class="app-header-menu" data-menu="project">
+                <button class="app-header-menu-btn" type="button">Project</button>
+                <div class="app-header-menu-dropdown">
+                    <button class="app-header-dropdown-item" id="hdr-open-other" type="button">Open other repository</button>
+                </div>
+            </div>
+            <!-- Update button sits next to the menu items (not pushed right) and
+                 is hidden until the Electron main process pushes `update-available`. -->
+            <button id="hdr-update-btn" class="app-header-update" type="button" hidden>
+                <span class="app-header-update-label">Update</span>
+            </button>
+        </nav>
+        <div class="app-header-spacer"></div>
+        <div class="app-header-window-controls" id="hdr-window-controls">
+            <button class="app-header-winbtn" id="hdr-win-min" type="button" title="Minimize" aria-label="Minimize">
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5 H10" stroke="currentColor" stroke-width="1"/></svg>
+            </button>
+            <button class="app-header-winbtn" id="hdr-win-max" type="button" title="Maximize" aria-label="Maximize">
+                <svg class="ico-max" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+                <svg class="ico-restore" width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="2.5" width="7" height="7" stroke="currentColor" stroke-width="1" fill="none"/><path d="M2.5 2.5 V0.5 H9.5 V7.5 H7.5" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+            </button>
+            <button class="app-header-winbtn app-header-winbtn-close" id="hdr-win-close" type="button" title="Close" aria-label="Close">
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0 L10 10 M10 0 L0 10" stroke="currentColor" stroke-width="1"/></svg>
+            </button>
+        </div>
+    </header>
+
     <div id="app">
         <!-- Activity bar: narrow icon strip on the far left (VSCode-style).
              Each button activates a named side-panel. -->
@@ -50,7 +87,7 @@
     <!-- Setup overlay: shown when no SS14 project is configured yet -->
     <div id="setup-overlay" class="setup-overlay" style="display:none">
         <div class="setup-card">
-            <div class="setup-logo">⚛</div>
+            <img class="setup-logo" src="img/icon.png" alt="" draggable="false">
             <h1 class="setup-title">SS14 Prototype Editor</h1>
             <p class="setup-desc">Enter the path to your SS14 project folder to begin.<br>
                 The project must be built first — run <code>dotnet build</code> in it.</p>
@@ -87,6 +124,7 @@
     <script src="js/editor-cards.js"></script>
     <script src="js/editor-components.js"></script>
     <script src="js/editor-add.js"></script>
+    <script src="js/app-header.js"></script>
     <script src="js/init.js"></script>
 </body>
 </html>

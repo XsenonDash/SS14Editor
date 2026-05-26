@@ -12,6 +12,7 @@
     "productName": "SS14 Editor",
     "files": [
       "main.js",
+      "preload.js",
       "icon.ico"
     ],
     "publish": {

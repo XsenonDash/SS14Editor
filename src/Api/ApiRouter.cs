@@ -64,6 +64,7 @@ internal sealed partial class ApiRouter
         "/api/configure",
         "/api/browse-folder",
         "/api/close",
+        "/api/recent-projects",
     };
 
     public ApiRouter(EditorContext? initialCtx)
@@ -76,6 +77,7 @@ internal sealed partial class ApiRouter
             ["/api/configure"] = HandleConfigureAsync,
             ["/api/browse-folder"] = HandleBrowseFolderAsync,
             ["/api/close"] = HandleCloseAsync,
+            ["/api/recent-projects"] = HandleRecentProjectsAsync,
 
             // Tree + prototype index (TreeApi.cs)
             ["/api/tree"] = HandleTreeAsync,

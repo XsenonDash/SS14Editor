@@ -30,9 +30,13 @@ public static class Program
                 break;
 
             case "serve":
-                var serveRoot = args.Length > 1 ? args[1] : FindSolutionRoot();
-                // serveRoot == null is intentional: the server starts in "setup mode"
-                // and lets the user pick a project folder in the browser.
+                // Only honour an explicit path argument. We deliberately do
+                // NOT fall back to FindSolutionRoot() here: walking up from
+                // the CWD picked up sibling SS14 forks unpredictably and
+                // skipped the project picker. Without an explicit path the
+                // server starts in setup mode and the user chooses a project
+                // through the WebUI.
+                var serveRoot = args.Length > 1 ? args[1] : null;
                 var port = args.Length > 2 ? int.Parse(args[2]) : 2701;
 
                 if (serveRoot != null)

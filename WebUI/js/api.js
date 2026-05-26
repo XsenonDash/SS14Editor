@@ -54,5 +54,9 @@ const api = {
     gitStatus()       { return this.get('/api/git-status'); },
     status()          { return this.get('/api/status'); },
     configure(projectPath) { return this.post('/api/configure', { projectPath }); },
+    close()           { return this.post('/api/close', {}); },
     browseFolder()    { return this.get('/api/browse-folder'); },
+    getRecentProjects()        { return this.get('/api/recent-projects'); },
+    addRecentProject(path)     { return this.post('/api/recent-projects', { path }); },
+    removeRecentProject(path)  { return this.post('/api/recent-projects', { path, remove: true }); },
 };
