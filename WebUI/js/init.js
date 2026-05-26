@@ -113,7 +113,8 @@ function startFileEventStream() {
                 fs.history = [content];
                 fs.historyIdx = 0;
                 state.resolvedCache.clear();
-                if (state.currentFile === path) renderEditor();
+                // Re-render every group whose active tab is this file.
+                state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));
                 toast(`Reloaded: ${path.split('/').pop()}`, 'info');
             } catch (e) {
                 console.error('[FileWatcher] Reload failed:', path, e);

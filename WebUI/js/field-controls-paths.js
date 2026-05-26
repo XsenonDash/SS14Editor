@@ -27,6 +27,8 @@ function resPathAutocomplete(input, opts = {}) {
     const filter = opts.filter || null;
     const hideFiles = !!opts.hideFiles;
     const dirIsTerminal = opts.dirIsTerminal || (() => false);
+    // Suppress browser address/form autocomplete — the dropdown is the UI.
+    input.autocomplete = 'off';
     // When set, file rows ending in .ogg get a tiny ▶ button that previews
     // the sound without committing the selection. Used by the SoundSpecifier
     // path picker so users can audition files before choosing.
@@ -73,19 +75,10 @@ function resPathAutocomplete(input, opts = {}) {
             // and SpriteView.create after the row is inserted so rendering
             // doesn't block the dropdown.
             if (previewRsi && isTerminal && d.toLowerCase().endsWith('.rsi')) {
-                const cur = input.value;
-                const lastSlash = cur.lastIndexOf('/');
-                const prefix = lastSlash >= 0 ? cur.substring(0, lastSlash + 1) : '';
-                const rsiFullPath = prefix + d;
-                const thumb = _div('respath-thumb respath-rsi-thumb');
+                // Show a folder icon for .rsi packs — no sprite preview.
+                const thumb = _div('respath-thumb respath-rsi-thumb respath-rsi-folder');
+                thumb.title = 'RSI sprite pack';
                 opt.appendChild(thumb);
-                (async () => {
-                    try {
-                        const meta = await SpriteView.loadMeta(rsiFullPath);
-                        const first = meta?.states?.[0];
-                        if (first) SpriteView.create(thumb, rsiFullPath, first.name, { size: 20 });
-                    } catch { /* missing/bad rsi — leave empty */ }
-                })();
             }
 
             const nameSpan = _el('span');
@@ -339,6 +332,7 @@ function spriteSpecifierCtrl(val, dis, cb) {
     const spriteLbl = _el('label'); spriteLbl.className = 'sprite-input-label'; spriteLbl.textContent = 'sprite';
     const spriteInp = _el('input'); spriteInp.type = 'text'; spriteInp.className = 'field-input sprite-input';
     spriteInp.value = rsiPath; spriteInp.disabled = dis; spriteInp.placeholder = 'Path/to/sprite.rsi';
+    spriteInp.autocomplete = 'off';
     spriteRow.append(spriteLbl, spriteInp);
     fields.appendChild(spriteRow);
 
@@ -347,6 +341,7 @@ function spriteSpecifierCtrl(val, dis, cb) {
     const stateLbl = _el('label'); stateLbl.className = 'sprite-input-label'; stateLbl.textContent = 'state';
     const stateInp = _el('input'); stateInp.type = 'text'; stateInp.className = 'field-input sprite-input';
     stateInp.value = stateName; stateInp.placeholder = 'State name';
+    stateInp.autocomplete = 'off';
     stateRow.append(stateLbl, stateInp);
     fields.appendChild(stateRow);
 
@@ -404,6 +399,7 @@ function spriteSpecifierCtrl(val, dis, cb) {
                 if (s.name === stateName) opt.classList.add('selected');
                 opt.addEventListener('mousedown', e => {
                     e.preventDefault();
+                    _suppressNextFocus = true;
                     stateInp.value = s.name;
                     stateDD.classList.remove('visible');
                     emit();
@@ -437,7 +433,11 @@ function spriteSpecifierCtrl(val, dis, cb) {
         });
     }
 
-    stateInp.addEventListener('focus', loadStates);
+    let _suppressNextFocus = false;
+    stateInp.addEventListener('focus', () => {
+        if (_suppressNextFocus) { _suppressNextFocus = false; return; }
+        loadStates();
+    });
     stateInp.addEventListener('input', loadStates);
     stateInp.addEventListener('blur', () => setTimeout(() => stateDD.classList.remove('visible'), 180));
     stateInp.addEventListener('change', emit);

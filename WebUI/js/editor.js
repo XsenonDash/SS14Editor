@@ -19,19 +19,24 @@ function scheduleRenderEditor() {
     });
 }
 
-function renderEditor() {
-    const area = document.getElementById('editor-area');
-    if (!state.currentFile) {
+function renderEditor(groupId) {
+    const gid = groupId ?? state.activeGroupId;
+    const group = state.groups?.find(g => g.id === gid);
+    const filePath = group?.activeTab ?? null;
+    const groupEl = document.querySelector(`.editor-group[data-group-id="${gid}"]`);
+    const area = groupEl?.querySelector('.group-content');
+    if (!area) return;
+    if (!filePath) {
         area.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>
             <h2>SS14 Prototype Redactor</h2>
             <p>Open a YAML file from the sidebar to start editing prototypes visually.</p>
             <p class="hint">Ctrl+S — force save</p></div>`;
         return;
     }
-    const fs = state.openFiles.get(state.currentFile);
+    const fs = state.openFiles.get(filePath);
     if (!fs) return;
     if (fs.loading) {
-        area.innerHTML = `<div class="editor-loading"><div class="editor-spinner"></div><div class="editor-loading-label">Loading ${esc(state.currentFile.split('/').pop())}\u2026</div></div>`;
+        area.innerHTML = `<div class="editor-loading"><div class="editor-spinner"></div><div class="editor-loading-label">Loading ${esc(filePath.split('/').pop())}\u2026</div></div>`;
         return;
     }
     const protos = fs.yaml;
@@ -45,8 +50,27 @@ function renderEditor() {
     preloadParents(protos).then(() => {
         state.resolvedCache.clear();
 
-        // Save collapse state before re-render
+        // Save collapse state, scroll position, and focused field before re-render.
         const collapseState = saveCollapseState(area);
+        const savedScroll = area.scrollTop;
+        // Track the focused input/select so we can restore focus after rebuild.
+        const focusedEl = document.activeElement;
+        let focusKey = null;
+        let focusSelStart = null, focusSelEnd = null;
+        if (focusedEl && area.contains(focusedEl)) {
+            // Build a stable key from the nearest proto-card's id + the field-row key.
+            const protoCard = focusedEl.closest('.proto-card');
+            const protoId = protoCard?.dataset?.protoId ?? '';
+            const fieldRow = focusedEl.closest('[data-field-key]');
+            const fieldKey = fieldRow?.dataset?.fieldKey ?? '';
+            if (fieldKey) {
+                focusKey = `${protoId}::${fieldKey}`;
+            }
+            if (focusedEl.selectionStart !== undefined) {
+                focusSelStart = focusedEl.selectionStart;
+                focusSelEnd   = focusedEl.selectionEnd;
+            }
+        }
 
         area.innerHTML = '';
         for (let i = 0; i < protos.length; i++) {
@@ -61,8 +85,26 @@ function renderEditor() {
         }
         area.appendChild(buildAddProtoFooter());
 
-        // Restore collapse state
+        // Restore collapse state and scroll position
         restoreCollapseState(area, collapseState);
+        area.scrollTop = savedScroll;
+        // Restore focus to the same field (identified by protoId::fieldKey).
+        if (focusKey) {
+            const [protoId, fieldKey] = focusKey.split('::');
+            const card = protoId
+                ? area.querySelector(`.proto-card[data-proto-id="${CSS.escape(protoId)}"]`)
+                : area;
+            const newFocus = (card ?? area).querySelector(`[data-field-key="${CSS.escape(fieldKey)}"]`);
+            if (newFocus) {
+                const inp = newFocus.querySelector('input, select, textarea') ?? newFocus;
+                if (inp && (inp.tagName === 'INPUT' || inp.tagName === 'SELECT' || inp.tagName === 'TEXTAREA')) {
+                    inp.focus({ preventScroll: true });
+                    if (focusSelStart !== null && inp.setSelectionRange) {
+                        try { inp.setSelectionRange(focusSelStart, focusSelEnd); } catch {}
+                    }
+                }
+            }
+        }
     }).catch(e => {
         console.error('[Editor] preloadParents failed:', e);
         area.innerHTML = `<div class="empty-state"><p style="color:var(--warning)">Render error: ${esc(e.message)}</p></div>`;
@@ -263,8 +305,8 @@ async function copyPrototype(type, sourceId) {
     fs.yaml.push(clone);
     commitChange(fs);
     renderEditor();
-    const area = document.getElementById('editor-area');
-    area.scrollTop = area.scrollHeight;
+    const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
+    if (area) area.scrollTop = area.scrollHeight;
 }
 
 function _generateUniqueProtoId(type, base) {
@@ -290,8 +332,8 @@ function addNewPrototype(type) {
     fs.yaml.push(proto);
     commitChange(fs);
     renderEditor();
-    const area = document.getElementById('editor-area');
-    area.scrollTop = area.scrollHeight;
+    const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
+    if (area) area.scrollTop = area.scrollHeight;
 }
 
 // ======================== PROTO CARD ===================================
@@ -567,18 +609,17 @@ function restoreCollapseState(area, saved) {
 }
 
 function collapseAllProtos(collapse) {
-    const area = document.getElementById('editor-area');
-    area.querySelectorAll('.proto-card').forEach(card => {
+    document.querySelectorAll('.group-content .proto-card').forEach(card => {
         card.classList.toggle('collapsed', collapse);
     });
 }
 
-// Editor area context menu for collapse/expand all
+// Editor area context menu for collapse/expand all — delegated on #editor-groups.
 document.addEventListener('DOMContentLoaded', () => {
-    const area = document.getElementById('editor-area');
-    if (area) {
-        area.addEventListener('contextmenu', e => {
-            // Only handle when clicking on empty bg area
+    const container = document.getElementById('editor-groups');
+    if (container) {
+        container.addEventListener('contextmenu', e => {
+            if (!e.target.closest('.group-content')) return;
             if (e.target.closest('.proto-card, .field-row, .component-card, .add-proto-footer')) return;
             e.preventDefault();
             showContextMenu(e.clientX, e.clientY, [
@@ -828,8 +869,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx) {
 }
 
 function collapseAllComponents(collapse) {
-    const area = document.getElementById('editor-area');
-    area.querySelectorAll('.component-card').forEach(card => {
+    document.querySelectorAll('.group-content .component-card').forEach(card => {
         card.classList.toggle('collapsed', collapse);
     });
 }

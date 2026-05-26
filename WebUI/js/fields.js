@@ -47,6 +47,7 @@ async function navigateToProto(type, id) {
 function fieldRow(key, meta, value, source, onChange, onReset) {
     const isLocal = source === 'local';
     const row = _div('field-row' + (isLocal ? ' field-local' : '') + (!isLocal ? ' inherited' : ''));
+    row.dataset.fieldKey = key;
 
     // Left override indicator bar (blue bar for locally-defined fields)
     if (isLocal) {

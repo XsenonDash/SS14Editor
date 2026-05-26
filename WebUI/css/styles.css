@@ -182,6 +182,66 @@ body {
 /* ======================== Main ========================== */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
+/* ======================== Editor Groups ================= */
+#editor-groups {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    overflow: hidden;
+    min-height: 0;
+}
+.editor-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 150px;
+    overflow: hidden;
+    position: relative; /* for split-zone overlays */
+}
+.group-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+}
+/* Divider between editor groups */
+.group-resizer {
+    width: 4px;
+    background: var(--border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background .15s;
+}
+.group-resizer:hover,
+.group-resizer.dragging { background: var(--accent); }
+/* Split drop zones: invisible until a tab drag is in progress */
+.split-zone {
+    display: none;
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 50px;
+    z-index: 50;
+    pointer-events: none;
+    border: 3px solid transparent;
+    background: transparent;
+    transition: background .1s, border-color .1s;
+    box-sizing: border-box;
+}
+#app.tab-dragging .split-zone {
+    display: block;
+    pointer-events: auto;
+}
+.split-zone-left  { left: 0; }
+.split-zone-right { right: 0; }
+.split-zone.drop-active {
+    background: rgba(88, 166, 255, 0.12);
+    border-color: var(--accent);
+}
+/* Tab drag-and-drop visual feedback */
+.tab.dragging { opacity: 0.4; }
+.tab.drag-over-left  { box-shadow: inset  3px 0 0 var(--accent); }
+.tab.drag-over-right { box-shadow: inset -3px 0 0 var(--accent); }
+
 /* ======================== Tabs ========================== */
 .tabs {
     display: flex; background: var(--bg-tertiary);
@@ -566,9 +626,12 @@ body {
 .respath-dir  { color: var(--text-link); display: flex; align-items: center; gap: 6px; }
 .respath-dir-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .respath-dir-name::before { content: '📁 '; }
-/* When a dir has an RSI thumbnail, suppress the generic folder emoji so the
-   sprite preview becomes the visual identifier. */
-.respath-dir:has(.respath-rsi-thumb) .respath-dir-name::before { content: ''; }
+/* When a dir has an RSI folder marker, suppress the generic folder emoji and
+   show a sprite-pack icon instead. */
+.respath-dir:has(.respath-rsi-thumb) .respath-dir-name::before { content: '🎨 '; }
+.respath-rsi-thumb {
+    display: none; /* The folder icon is via ::before — no need for the thumb element */
+}
 .respath-file::before { content: '📄 '; }
 .respath-file { display: flex; align-items: center; gap: 6px; }
 .respath-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1207,6 +1270,13 @@ body {
     min-height: 22px;
     position: relative;
 }
+/* List items only: don't stretch to full editor width so the remove button
+   sits right next to the value instead of being pushed to the far right
+   edge of the card. max-width: 100% prevents overflow on long values. */
+.list-item {
+    width: fit-content;
+    max-width: 100%;
+}
 .list-item::before, .map-entry::before {
     content: '- ';
     color: var(--yaml-punct);
@@ -1220,7 +1290,7 @@ body {
    DOM order (`- key: value`) because they have no drag handle and the
    key label must immediately follow the dash. */
 .list-item::before { order: 1; }
-.list-item .list-item-content { order: 2; flex: 1 1 auto; min-width: 0; }
+.list-item .list-item-content { order: 2; flex: 1 1 auto; min-width: 120px; }
 .list-item:hover, .map-entry:hover {
     background: rgba(88, 166, 255, 0.04);
     border-color: transparent;
@@ -1472,7 +1542,7 @@ body {
    cards FULLY transparent. The sidebar (file tree + search) is bumped to
    a lighter shade so the file browser visibly contrasts with the dark
    editor; the search input gets one more step of brightness so it pops. */
-.editor-area {
+.editor-area, .group-content {
     background: var(--bg-tertiary); /* #1e1f22 — darkest */
 }
 #activity-bar,

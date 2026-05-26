@@ -15,6 +15,11 @@ const state = {
     parentFileCache: new Map(),   // filePath → parsed yaml array (for inheritance lookup)
     expandedDirs: new Set(),      // tree directory paths that are currently expanded (preserved across re-renders)
     gitStatus  : null,            // { available, files: { 'rel/path.yml': 'new'|'modified'|'deleted'|'renamed'|'conflict' } }
+
+    // Editor groups: each group owns an ordered tab list and a visible active tab.
+    // state.openFiles is shared across all groups (file data is loaded once).
+    groups      : [{ id: 'g1', tabs: [], activeTab: null }],
+    activeGroupId: 'g1',
 };
 
 class FileState {
