@@ -1,0 +1,64 @@
+{
+  "name": "ss14-editor",
+  "version": "1.0.0",
+  "description": "SS14 Prototype Editor – desktop wrapper",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.ss14.editor",
+    "productName": "SS14 Editor",
+    "files": [
+      "main.js",
+      "icon.ico"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "TheShuEd",
+      "repo": "SS14Editor"
+    },
+    "extraResources": [
+      {
+        "from": "../publish/server",
+        "to": "server",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "icon": "../icon.ico",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "artifactName": "ss14-editor-v${version}-setup.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "ss14-editor-v${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "artifactName": "ss14-editor-v${version}-linux-x64.${ext}"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["arm64"] }
+      ],
+      "artifactName": "ss14-editor-v${version}-osx-arm64.${ext}"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.0"
+  }
+}

@@ -79,6 +79,43 @@ The generated files (`metadata.json`, `metadata.cache.txt`) are stored in the OS
 
 ---
 
+## Desktop app (Electron)
+
+The `electron/` folder contains an Electron wrapper that opens the editor in its own window instead of a browser tab.
+
+### Development
+
+```bash
+# 1. Build the .NET server
+dotnet build -c Release
+
+# 2. Install Electron dependencies (once)
+cd electron
+npm install
+
+# 3. Run
+npm start
+```
+
+The main process starts `ss14-redactor.exe serve` as a child process (with `SS14_EDITOR_NO_BROWSER=1` to suppress the automatic browser launch), waits for the server to be ready, then opens a `BrowserWindow` pointed at `http://localhost:2701`.  
+A tray icon lets you hide/show the window or quit.
+
+### Packaging a distributable
+
+```bash
+# Publish the .NET binary first (from repo root)
+dotnet publish -c Release -r win-x64 --self-contained -o publish/win-x64
+
+# Then build the Electron installer (from electron/)
+cd electron
+npm run dist
+```
+
+Output goes to `electron/dist/`. Produces an NSIS installer (`*-Setup.exe`) and a portable executable.  
+Optionally place a 256×256 `icon.ico` in `electron/` to use a custom app icon.
+
+---
+
 ## How it works
 
 The tool uses `System.Reflection.MetadataLoadContext` to read the compiled game DLLs **without executing any game code**. This makes it safe and fast to load.  

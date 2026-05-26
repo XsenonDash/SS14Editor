@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Content.Editor.Editor;
@@ -10,13 +11,18 @@ internal sealed partial class ApiRouter
 {
     private Task HandleStatusAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
+        var version = Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+            ?.InformationalVersion ?? "0.0.0-dev";
+
         var ctx = _ctx;
         if (ctx == null)
-            return HttpJson.WriteAsync(res, new { configured = false });
+            return HttpJson.WriteAsync(res, new { configured = false, version });
 
         return HttpJson.WriteAsync(res, new
         {
             configured = true,
+            version,
             projectPath = ctx.SolutionRoot,
             prototypes = ctx.ProtoIndex.TotalCount,
             typeCount = ctx.ProtoIndex.TypeCount,

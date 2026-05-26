@@ -142,6 +142,9 @@ function startFileEventStream() {
     try { status = await api.status(); }
     catch (e) { status = { configured: false }; }
 
+    const versionEl = document.getElementById('status-bar-version');
+    if (versionEl && status.version) versionEl.textContent = 'v' + status.version;
+
     if (!status.configured) {
         showSetupOverlay();
         return; // editor loads after successful configure

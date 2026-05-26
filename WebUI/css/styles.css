@@ -70,7 +70,28 @@ body {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* ======================== Layout ======================== */
-#app { display: flex; height: 100vh; }
+#app { display: flex; height: calc(100vh - 22px); }
+
+/* ======================== Status Bar ==================== */
+#status-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 22px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 10px;
+    font-size: 11px;
+    color: var(--text-muted);
+    z-index: 1000;
+    user-select: none;
+}
+#status-bar-version {
+    font-family: var(--font-mono);
+    letter-spacing: 0.02em;
+}
 
 /* ======================== Activity Bar ================== */
 #activity-bar {

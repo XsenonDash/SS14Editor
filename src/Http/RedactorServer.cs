@@ -219,6 +219,8 @@ public static class EditorServer
 
     private static void TryOpenBrowser(string url)
     {
+        if (Environment.GetEnvironmentVariable("SS14_EDITOR_NO_BROWSER") == "1")
+            return;
         try
         {
             Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });

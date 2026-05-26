@@ -2,6 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <AssemblyName>ss14-editor</AssemblyName>
+    <Version>0.0.0-dev</Version>
     <RootNamespace>Content.Editor</RootNamespace>
     <TargetFramework>net10.0</TargetFramework>
     <!-- Keep output flat: bin/ss14-editor[.exe] -->
