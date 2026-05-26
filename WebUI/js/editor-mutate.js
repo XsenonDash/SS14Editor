@@ -49,6 +49,8 @@ function commitChange(fs) {
     if (fs.doc && fs.dirtyProtos?.size > 0 &&
         fs.yaml.length === fs.doc.contents?.items?.length) {
         nc = dumpYamlRespectful(fs.yaml, fs.doc, fs.content, fs.dirtyProtos);
+    } else if (fs.structuralChange && fs.doc && YAML.isSeq(fs.doc.contents)) {
+        nc = dumpYamlRespectfulStructural(fs.yaml, fs.content, fs.doc);
     } else {
         nc = dumpYaml(fs.yaml);
     }
@@ -73,7 +75,7 @@ function scheduleAutosave(fs) {
     fs._saveTimer = setTimeout(async () => {
         try {
             let payload = fs.content;
-            if (!fs.structuralChange && fs.doc && fs.yaml && fs.dirtySinceSave) {
+            if (!fs.structuralChange && fs.doc && fs.yaml && fs.dirtySinceSave?.size > 0) {
                 try {
                     const disk = await api.loadFile(fs.path);
                     if (disk && typeof disk.content === 'string' && disk.content !== fs.content) {
@@ -119,6 +121,8 @@ function handleUndo() {
     fs.yaml = protos;
     fs.doc = doc;
     fs.dirtyProtos = new Set();
+    fs.dirtySinceSave = new Set();
+    fs.structuralChange = false;
     state.resolvedCache.clear();
     renderEditor(); renderTabs(); scheduleAutosave(fs);
 }
@@ -130,6 +134,8 @@ function handleRedo() {
     fs.yaml = protos;
     fs.doc = doc;
     fs.dirtyProtos = new Set();
+    fs.dirtySinceSave = new Set();
+    fs.structuralChange = false;
     state.resolvedCache.clear();
     renderEditor(); renderTabs(); scheduleAutosave(fs);
 }

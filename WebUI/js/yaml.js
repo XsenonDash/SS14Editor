@@ -451,3 +451,69 @@ function dumpYamlMergeDisk(editorYaml, editorDoc, diskContent, diskDoc, dirtySin
     parts.push(diskContent.slice(pos));
     return parts.join('');
 }
+
+/**
+ * Structural-respectful serialize: handles add, delete, and reorder of
+ * prototypes while keeping existing comments intact.
+ *
+ * Matches old protos to new ones by id. For each proto present in both
+ * old and new, its original raw text (including any comment immediately
+ * before the '-') is sliced verbatim from oldText. Newly-added protos
+ * (no matching id in old) are serialized fresh. Deleted protos and their
+ * associated comments are dropped.
+ *
+ * Content before the very first '-' (file-level header comments) is
+ * always preserved as the file preamble.
+ *
+ * Falls back to dumpYaml() when range data is missing.
+ */
+function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc) {
+    if (!oldDoc || !YAML.isSeq(oldDoc.contents)) return dumpYaml(newYaml);
+    const items = oldDoc.contents.items;
+    if (!items.length) return dumpYaml(newYaml);
+
+    // Extract (prefix, body, id, origIdx) for each old proto.
+    const slices = [];
+    let pos = 0;
+    for (let j = 0; j < items.length; j++) {
+        const item = items[j];
+        if (!item.range) return dumpYaml(newYaml);
+        const nodeStart = item.range[0];
+        const nodeEnd   = item.range[2];
+        const itemStart = _seqEntryStart(oldText, nodeStart);
+        slices.push({
+            prefix  : oldText.slice(pos, itemStart),
+            body    : oldText.slice(itemStart, nodeEnd),
+            id      : _nodeToJs(item)?.id,
+            origIdx : j,
+        });
+        pos = nodeEnd;
+    }
+    const trailer = oldText.slice(pos);
+    // Content before any proto (file-level header comments, etc.)
+    const fileHeader = slices[0].prefix;
+
+    // id -> slice (only well-formed protos with an id field)
+    const byId = new Map(slices.filter(s => s.id != null).map(s => [s.id, s]));
+
+    const parts = [fileHeader];
+    for (let i = 0; i < newYaml.length; i++) {
+        const id  = newYaml[i]?.id;
+        const old = id != null ? byId.get(id) : undefined;
+        if (old) {
+            if (i > 0) {
+                // Use the proto's original prefix as separator, UNLESS it
+                // was originally the first proto (prefix == fileHeader,
+                // already emitted above) - use a plain newline in that case.
+                parts.push(old.origIdx === 0 ? '\n' : (old.prefix || '\n'));
+            }
+            parts.push(old.body);
+        } else {
+            // New proto - serialize fresh with a standard blank-line gap.
+            if (i > 0) parts.push('\n');
+            parts.push(_dumpSingleProto(newYaml[i]).trimEnd() + '\n');
+        }
+    }
+    parts.push(trailer || '\n');
+    return parts.join('');
+}

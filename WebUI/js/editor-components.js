@@ -33,6 +33,8 @@ function buildComponentsSection(proto, protoIdx, inherited, filePath) {
             const fs = state.openFiles.get(filePath);
             if (!fs || !fs.yaml[protoIdx]) return;
             delete fs.yaml[protoIdx].components;
+            if (fs.doc) docDeleteField(fs.doc, [protoIdx], 'components');
+            fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
             state.resolvedCache.clear();
             commitChange(fs); renderEditor();
         });
@@ -59,6 +61,8 @@ function showAddComponentModal(proto, protoIdx, filePath) {
         if (!fs || !fs.yaml[protoIdx]) return;
         if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
         fs.yaml[protoIdx].components.push({ type: t });
+        if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+        fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
         commitChange(fs); renderEditor();
     });
 }
@@ -156,6 +160,8 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
             const fs = state.openFiles.get(filePath ?? state.currentFile);
             if (fs && fs.yaml[protoIdx]?.components) {
                 fs.yaml[protoIdx].components.splice(compIdx, 1);
+                if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
                 commitChange(fs); renderEditor();
             }
         });
@@ -171,6 +177,8 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
                 const fs = state.openFiles.get(filePath ?? state.currentFile);
                 if (fs && fs.yaml[protoIdx]?.components) {
                     fs.yaml[protoIdx].components.splice(compIdx, 1);
+                    if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                    fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
                     commitChange(fs); renderEditor();
                 }
             }});

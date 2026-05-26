@@ -313,7 +313,8 @@ ipcMain.on('window-maximize-toggle', () => {
     else mainWindow.maximize();
 });
 ipcMain.on('window-close', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+    app.isQuitting = true;
+    app.quit();
 });
 
 // ---------------------------------------------------------------------------
@@ -360,5 +361,4 @@ app.on('before-quit', () => {
     }
 });
 
-// Keep the app running while the tray is active
-app.on('window-all-closed', () => { /* intentionally empty – stay in tray */ });
+app.on('window-all-closed', () => { app.quit(); });

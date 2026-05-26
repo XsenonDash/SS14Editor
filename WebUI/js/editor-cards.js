@@ -64,7 +64,6 @@ function buildCard(proto, idx, filePath) {
         const fs = state.openFiles.get(filePath);
         if (fs && fs.yaml) {
             fs.yaml.splice(idx, 1);
-            fs.doc = null;
             fs.structuralChange = true;
             commitChange(fs);
             renderEditor();
@@ -120,7 +119,6 @@ function buildCard(proto, idx, filePath) {
         if (!fs || !Array.isArray(fs.yaml) || from < 0 || from >= fs.yaml.length) return;
         const [moved] = fs.yaml.splice(from, 1);
         fs.yaml.splice(to, 0, moved);
-        fs.doc = null;
         fs.structuralChange = true;
         commitChange(fs);
         renderEditor();

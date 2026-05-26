@@ -23,21 +23,16 @@ const state = {
 
 class FileState {
     constructor(path, content) {
-        this.path       = path;
-        this.content    = content;
-        this.yaml       = null;
-        this.modified   = false;
-        this.history    = [content];
-        this.historyIdx = 0;
-        this._saveTimer = null;
-        // Cumulative set of proto indices the editor has touched since the
-        // last successful save. Separate from `dirtyProtos` (per-commit) so
-        // that scheduleAutosave knows which protos to re-serialize from the
-        // editor's AST when merging with externally-edited disk content.
-        this.dirtySinceSave  = new Set();
-        // Set by add / delete / reorder-prototype paths to disable the
-        // disk-merge fast-path on next save (index alignment is broken).
-        this.structuralChange = false;
+        this.path           = path;
+        this.content        = content;
+        this.yaml           = null;
+        this.doc            = null;
+        this.modified       = false;
+        this.history        = [content];
+        this.historyIdx     = 0;
+        this._saveTimer     = null;
+        this.dirtyProtos    = new Set();
+        this.dirtySinceSave = new Set();
     }
     pushHistory(nc) {
         this.history = this.history.slice(0, this.historyIdx + 1);

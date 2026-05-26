@@ -167,7 +167,6 @@ async function copyPrototype(type, sourceId) {
     const clone = JSON.parse(JSON.stringify(src));
     clone.id = _generateUniqueProtoId(type, sourceId);
     fs.yaml.push(clone);
-    fs.doc = null;
     fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
@@ -196,7 +195,6 @@ function addNewPrototype(type) {
     // "+ Add item" on the parent bar which commits an empty slot via
     // `onParentChange` — keeping the add-item codepath intact.
     fs.yaml.push(proto);
-    fs.doc = null;
     fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
