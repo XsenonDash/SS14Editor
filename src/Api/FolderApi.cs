@@ -41,6 +41,8 @@ internal sealed partial class ApiRouter
         }
         Directory.CreateDirectory(target);
         var rel = Path.GetRelativePath(ctx.PrototypesDir, target).Replace('\\', '/');
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         Logger.Info($"Folder created: {rel}");
         await HttpJson.WriteAsync(res, new { success = true, path = rel });
     }
@@ -81,7 +83,11 @@ internal sealed partial class ApiRouter
             return;
         }
         Directory.Move(oldFull, newFull);
-        ctx.ProtoIndex.Rebuild();
+        // Rebuild touches every YAML in the project — push it off-thread so
+        // the request worker is free to dispatch concurrent reads.
+        await Task.Run(() => ctx.ProtoIndex.Rebuild());
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         var newRel = Path.GetRelativePath(ctx.PrototypesDir, newFull).Replace('\\', '/');
         Logger.Info($"Folder renamed: {oldRel} -> {newRel}");
         await HttpJson.WriteAsync(res, new { success = true, newPath = newRel });
@@ -123,7 +129,9 @@ internal sealed partial class ApiRouter
             return;
         }
         Directory.Delete(fullPath, recursive);
-        ctx.ProtoIndex.Rebuild();
+        await Task.Run(() => ctx.ProtoIndex.Rebuild());
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         Logger.Info($"Folder deleted: {relPath} (recursive={recursive})");
         await HttpJson.WriteAsync(res, new { success = true });
     }

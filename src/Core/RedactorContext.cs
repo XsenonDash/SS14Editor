@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 
 namespace Content.Editor.Editor;
@@ -41,6 +43,46 @@ internal sealed class EditorContext : IDisposable
 
     private int _refs = 1;
     private int _disposed; // 0 = alive, 1 = cleanup ran
+
+    // ----- File-tree snapshot cache --------------------------------------
+    // /api/tree used to walk the whole prototypes directory on every request,
+    // which can take seconds on large forks. We cache the assembled list and
+    // invalidate from the FSW handler (created / deleted / renamed) and from
+    // folder-mutating endpoints (rename-folder / delete-folder / create-folder).
+    // The cached value is intentionally an immutable reference: handlers return
+    // it directly to JsonSerializer without copying. Never mutate the list
+    // returned by GetTreeSnapshot().
+    private readonly object _treeCacheLock = new();
+    private List<FileTreeNode>? _treeCache;
+
+    public List<FileTreeNode> GetTreeSnapshot()
+    {
+        lock (_treeCacheLock)
+        {
+            if (_treeCache != null) return _treeCache;
+            var tree = FileTreeService.Build(PrototypesDir);
+            if (Directory.Exists(EnginePrototypesDir))
+            {
+                var engineTree = FileTreeService.Build(EnginePrototypesDir, "", ProtoIndexService.EnginePrefix);
+                FileTreeService.MarkReadOnly(engineTree);
+                tree.Add(new FileTreeNode
+                {
+                    Name = "⚙ Engine (read-only)",
+                    Path = "__engine__",
+                    IsDir = true,
+                    ReadOnly = true,
+                    Children = engineTree,
+                });
+            }
+            _treeCache = tree;
+            return tree;
+        }
+    }
+
+    public void InvalidateTree()
+    {
+        lock (_treeCacheLock) { _treeCache = null; }
+    }
 
     /// <summary>
     /// Atomically increments the reference count if the context is still alive.

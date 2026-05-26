@@ -8,24 +8,7 @@ namespace Content.Editor.Editor;
 internal sealed partial class ApiRouter
 {
     private Task HandleTreeAsync(HttpListenerRequest req, HttpListenerResponse res)
-    {
-        var ctx = ScopedCtx;
-        var tree = FileTreeService.Build(ctx.PrototypesDir);
-        if (Directory.Exists(ctx.EnginePrototypesDir))
-        {
-            var engineTree = FileTreeService.Build(ctx.EnginePrototypesDir, "", ProtoIndexService.EnginePrefix);
-            FileTreeService.MarkReadOnly(engineTree);
-            tree.Add(new FileTreeNode
-            {
-                Name = "⚙ Engine (read-only)",
-                Path = "__engine__",
-                IsDir = true,
-                ReadOnly = true,
-                Children = engineTree,
-            });
-        }
-        return HttpJson.WriteAsync(res, tree);
-    }
+        => HttpJson.WriteAsync(res, ScopedCtx.GetTreeSnapshot());
 
     private async Task HandleMetadataAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
@@ -59,10 +42,14 @@ internal sealed partial class ApiRouter
         return HttpJson.WriteAsync(res, ScopedCtx.ProtoIndex.Search(type, q, limit));
     }
 
-    private Task HandleRefreshIndexAsync(HttpListenerRequest req, HttpListenerResponse res)
+    private async Task HandleRefreshIndexAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
         var ctx = ScopedCtx;
-        ctx.ProtoIndex.Rebuild();
-        return HttpJson.WriteAsync(res, new { count = ctx.ProtoIndex.TotalCount });
+        // Rebuild() touches every YAML file under the project — on large
+        // forks this can take seconds. Off-thread it so the HttpListener
+        // worker is free to dispatch other requests.
+        await Task.Run(() => ctx.ProtoIndex.Rebuild());
+        ctx.InvalidateTree();
+        await HttpJson.WriteAsync(res, new { count = ctx.ProtoIndex.TotalCount });
     }
 }

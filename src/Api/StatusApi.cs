@@ -86,9 +86,18 @@ internal sealed partial class ApiRouter
                     {
                         case FileChangeKind.Deleted:
                             captured.ProtoIndex.RefreshFile(evt.FullPath, rel);
+                            captured.InvalidateTree();
+                            captured.Events.Broadcast(new { type = "tree-change" });
                             break;
                         case FileChangeKind.Created:
+                            captured.InvalidateTree();
+                            captured.Events.Broadcast(new { type = "tree-change" });
+                            if (File.Exists(evt.FullPath))
+                                captured.ProtoIndex.RefreshFile(evt.FullPath, rel);
+                            break;
                         case FileChangeKind.Changed:
+                            // Content change doesn't move/add/remove tree nodes,
+                            // only re-scan the index for that file.
                             if (File.Exists(evt.FullPath))
                                 captured.ProtoIndex.RefreshFile(evt.FullPath, rel);
                             break;
