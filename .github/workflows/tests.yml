@@ -1,4 +1,4 @@
-name: tests
+name: Testing
 
 on:
   push:
@@ -19,7 +19,7 @@ jobs:
           dotnet-quality: preview
 
       - name: Restore
-        run: dotnet restore tests/ss14-redactor.Tests/ss14-redactor.Tests.csproj
+        run: dotnet restore tests/ss14-editor.Tests/ss14-editor.Tests.csproj
 
       - name: Test
-        run: dotnet test tests/ss14-redactor.Tests/ss14-redactor.Tests.csproj --nologo --verbosity normal
+        run: dotnet test tests/ss14-editor.Tests/ss14-editor.Tests.csproj --nologo --verbosity normal
