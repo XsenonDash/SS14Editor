@@ -4,6 +4,36 @@
 
 'use strict';
 
+/**
+ * Build the shared file-action context menu items for a YAML/resource file.
+ * Used by both the file tree and the tab strip so the menus stay in sync.
+ *
+ * @param {string}  path     - Workspace-relative path.
+ * @param {boolean} readOnly - Whether the file is read-only.
+ * @returns {Array}  Items array suitable for showContextMenu().
+ */
+function fileMenuItems(path, readOnly) {
+    const parentDir = path.includes('/')
+        ? path.substring(0, path.lastIndexOf('/'))
+        : '';
+    const items = [
+        { label: 'Open with Default Editor', action: () => api.openDefault(path) },
+        { label: 'Open in Explorer',         action: () => api.openInExplorer(path) },
+        { label: 'Copy Path', action: () => {
+            navigator.clipboard.writeText(path).catch(() => {});
+            toast('Copied', 'info');
+        }},
+    ];
+    if (!readOnly) {
+        items.push('---');
+        items.push({ label: 'New File in Folder…', action: () => promptCreateFile(parentDir) });
+        items.push('---');
+        items.push({ label: 'Rename…', action: () => promptRenameFile(path) });
+        items.push({ label: 'Delete',  danger: true, action: () => promptDeleteFile(path) });
+    }
+    return items;
+}
+
 function renderFileTree(nodes, container, filter = '') {
     container.innerHTML = '';
     const filtered = filterTreeNodes(nodes, filter.toLowerCase());
@@ -111,16 +141,11 @@ function buildTreeDom(nodes, parent, depth) {
             el.addEventListener('click', () => openFile(n.path));
             el.addEventListener('contextmenu', e => {
                 e.preventDefault(); e.stopPropagation();
-                const items = [{ label: 'Open', action: () => openFile(n.path) }];
-                items.push({ label: 'Open with Default Editor', action: () => api.openDefault(n.path) });
-                items.push({ label: 'Open in Explorer', action: () => api.openInExplorer(n.path) });
-                if (!n.readOnly) {
-                    items.push('---');
-                    items.push({ label: 'New File…', action: () => promptCreateFile(n.path.includes('/') ? n.path.substring(0, n.path.lastIndexOf('/')) : '') });
-                    items.push('---');
-                    items.push({ label: 'Rename…', action: () => promptRenameFile(n.path) });
-                    items.push({ label: 'Delete', danger: true, action: () => promptDeleteFile(n.path) });
-                }
+                const items = [
+                    { label: 'Open', action: () => openFile(n.path) },
+                    '---',
+                    ...fileMenuItems(n.path, !!n.readOnly),
+                ];
                 showContextMenu(e.clientX, e.clientY, items);
             });
             parent.appendChild(el);

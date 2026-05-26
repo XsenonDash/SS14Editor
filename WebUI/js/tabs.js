@@ -268,16 +268,13 @@ function _makeTab(path, group) {
     // Context menu
     tab.addEventListener('contextmenu', e => {
         e.preventDefault();
+        const isReadOnly = state.openFiles.get(path)?.readOnly ?? false;
         showContextMenu(e.clientX, e.clientY, [
             { label: 'Close',        action: () => closeTab(path, group.id) },
             { label: 'Close Others', action: () => closeOtherTabs(path, group.id) },
             { label: 'Close All',    action: () => closeAllTabs() },
             '---',
-            { label: 'Open with Default Editor', action: () => api.openDefault(path) },
-            { label: 'Open in Explorer',         action: () => api.openInExplorer(path) },
-            { label: 'Copy Path', action: () => { navigator.clipboard.writeText(path).catch(() => {}); toast('Copied', 'info'); } },
-            '---',
-            { label: 'Rename…', action: () => promptRenameFile(path) },
+            ...fileMenuItems(path, isReadOnly),
         ]);
     });
 
