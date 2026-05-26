@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Reflection;
@@ -64,8 +63,6 @@ public static class EditorServer
 
         Logger.Info($"Editor running at http://localhost:{port}/");
         Logger.Info("Press Ctrl+C to stop.");
-
-        TryOpenBrowser($"http://localhost:{port}/");
 
         while (true)
         {
@@ -217,16 +214,6 @@ public static class EditorServer
         return Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
     }
 
-    private static void TryOpenBrowser(string url)
-    {
-        if (Environment.GetEnvironmentVariable("SS14_EDITOR_NO_BROWSER") == "1")
-            return;
-        try
-        {
-            Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
-        }
-        catch { /* non-critical */ }
-    }
 }
 
 public sealed class FileTreeNode

@@ -47,7 +47,7 @@ function getServerBinary() {
 function startServer() {
     const binary = getServerBinary();
     serverProcess = spawn(binary, ['serve'], {
-        env: { ...process.env, SS14_EDITOR_NO_BROWSER: '1' },
+        env: { ...process.env },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     serverProcess.stdout.on('data', d => process.stdout.write(`[server] ${d}`));
