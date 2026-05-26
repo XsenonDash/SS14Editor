@@ -1187,6 +1187,43 @@ body {
     align-self: flex-start;
 }
 
+/* ── Block-layout map entries (complex value types: list, map, datadef…) ──
+   Mirrors YAML block-mapping style:
+     - key:
+         <value block>
+   The ::before "- " dash moves into .map-entry-header so it stays on the
+   same visual line as the key. Value content is indented below.           */
+.map-entry--block {
+    flex-direction: column;
+    gap: 0;
+}
+.map-entry--block::before {
+    /* Suppress the default ::before dash — it will appear on .map-entry-header */
+    display: none;
+}
+.map-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.map-entry-header::before {
+    content: '- ';
+    color: var(--yaml-punct);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    flex-shrink: 0;
+    line-height: 1.5;
+}
+/* Remove button lives inside the header for block entries; unset order so it
+   follows normal DOM flow in the header flex-row (after the key label). */
+.map-entry--block .entry-remove-btn {
+    order: unset;
+    align-self: center;
+}
+.map-entry--block .map-entry-content {
+    padding-left: var(--yaml-indent);
+}
+
 .list-add-row, .map-add-row {
     padding-left: var(--yaml-indent);
     margin-top: 2px;

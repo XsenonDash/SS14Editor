@@ -232,21 +232,47 @@ function mapCtrl(val, meta, dis, onChange) {
     const obj = (val && typeof val === 'object' && !Array.isArray(val)) ? { ...val } : {};
     const w = _div('field-control map-editor');
 
+    // Kinds whose controls expand into block-level widgets (multi-line,
+    // nested structure). For these entries the value goes below the key
+    // (like YAML block mappings), rather than inline to the right.
+    const _complexValueKinds = new Set(['list', 'map', 'spriteSpecifier', 'soundSpecifier', 'componentRegistry']);
+    function _isBlockValue(valueMeta) {
+        if (!valueMeta) return false;
+        return _complexValueKinds.has(valueMeta.kind) ||
+            !!valueMeta.isDataDefinition ||
+            !!(valueMeta.fullType && state.metadata?.polymorphicTypes?.[valueMeta.fullType]?.length);
+    }
+
     function rebuild() {
         w.innerHTML = '';
+        const isBlock = _isBlockValue(meta.value);
         for (const [k, v] of Object.entries(obj)) {
-            const row = _div('map-entry');
+            const row = _div(isBlock ? 'map-entry map-entry--block' : 'map-entry');
             const keyLabel = _div('map-key-label'); keyLabel.textContent = k;
-            row.appendChild(keyLabel);
             const content = _div('map-entry-content');
             content.appendChild(elementControl(meta.value, v, dis, nv => {
                 obj[k] = nv; onChange({ ...obj });
             }));
-            row.appendChild(content);
-            if (!dis) {
-                const rm = _el('button'); rm.className = 'entry-remove-btn'; rm.textContent = '×'; rm.title = 'Remove';
-                rm.addEventListener('click', () => { delete obj[k]; onChange({ ...obj }); rebuild(); });
-                row.appendChild(rm);
+            if (isBlock) {
+                // Block layout: key (+ remove btn) on first line, value indented below.
+                const hdr = _div('map-entry-header');
+                hdr.appendChild(keyLabel);
+                if (!dis) {
+                    const rm = _el('button'); rm.className = 'entry-remove-btn'; rm.textContent = '×'; rm.title = 'Remove';
+                    rm.addEventListener('click', () => { delete obj[k]; onChange({ ...obj }); rebuild(); });
+                    hdr.appendChild(rm);
+                }
+                row.appendChild(hdr);
+                row.appendChild(content);
+            } else {
+                // Inline layout: key: value on one line (simple scalars).
+                row.appendChild(keyLabel);
+                row.appendChild(content);
+                if (!dis) {
+                    const rm = _el('button'); rm.className = 'entry-remove-btn'; rm.textContent = '×'; rm.title = 'Remove';
+                    rm.addEventListener('click', () => { delete obj[k]; onChange({ ...obj }); rebuild(); });
+                    row.appendChild(rm);
+                }
             }
             w.appendChild(row);
         }
