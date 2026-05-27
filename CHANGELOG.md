@@ -2,6 +2,7 @@
 
 ## v1.1.11
 - Optimization has been implemented to reduce app freezes when editing prototypes.
+- Fixed a major freeze in the editor during file searches.
 
 ## v1.1.10
 - The project search now also searches by filename
