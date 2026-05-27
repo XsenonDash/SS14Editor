@@ -21,29 +21,29 @@ function resolveProto(type, id) {
     const key = `${type}:${id}`;
     if (state.resolvedCache.has(key)) return state.resolvedCache.get(key);
 
-    // First check open files
-    for (const [, fs] of state.openFiles) {
-        if (!fs.yaml) continue;
-        const p = fs.yaml.find(x => x.type === type && x.id === id);
-        if (!p) continue;
-        let data = { ...p };
-        if (p.parent) data = deepMerge(resolveInheritance(type, p.parent), data);
-        state.resolvedCache.set(key, data);
-        return data;
+    // Build the lookup index lazily (once per render cycle, nulled by cache clear).
+    // This replaces the old O(files × protos_per_file) linear scan with O(1).
+    if (!state.protoLookup) {
+        const map = new Map();
+        for (const [, fs] of state.openFiles) {
+            if (fs.yaml) for (const p of fs.yaml) {
+                if (p.type && p.id) map.set(`${p.type}:${p.id}`, p);
+            }
+        }
+        for (const [, protos] of state.parentFileCache) {
+            if (protos) for (const p of protos) {
+                if (p.type && p.id) map.set(`${p.type}:${p.id}`, p);
+            }
+        }
+        state.protoLookup = map;
     }
 
-    // Check parent file cache (files loaded for inheritance resolution)
-    for (const [, protos] of state.parentFileCache) {
-        if (!protos) continue;
-        const p = protos.find(x => x.type === type && x.id === id);
-        if (!p) continue;
-        let data = { ...p };
-        if (p.parent) data = deepMerge(resolveInheritance(type, p.parent), data);
-        state.resolvedCache.set(key, data);
-        return data;
-    }
-
-    return null;
+    const p = state.protoLookup.get(key);
+    if (!p) return null;
+    let data = { ...p };
+    if (p.parent) data = deepMerge(resolveInheritance(type, p.parent), data);
+    state.resolvedCache.set(key, data);
+    return data;
 }
 
 /**
@@ -97,6 +97,7 @@ async function preloadParents(protos) {
                 const { content } = await api.loadFile(relPath);
                 const parsed = parseYaml(content);
                 state.parentFileCache.set(relPath, parsed);
+                state.protoLookup = null; // new protos available; rebuild on next resolveProto call
 
                 // Check if loaded protos have their own parents
                 for (const p of parsed) {

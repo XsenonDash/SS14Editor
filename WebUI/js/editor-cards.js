@@ -44,7 +44,7 @@ function buildCard(proto, idx, filePath) {
         const onAbsChange = checked => {
             if (checked) setFieldValue([idx], 'abstract', true, filePath);
             else deleteField([idx], 'abstract', filePath);
-            state.resolvedCache.clear();
+            state.resolvedCache.clear(); state.protoLookup = null;
             renderEditor();
         };
         const onAbsReset = absSource === 'local'

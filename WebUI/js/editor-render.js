@@ -17,11 +17,11 @@ function scheduleRenderEditor() {
     _renderScheduled = true;
     requestAnimationFrame(() => {
         _renderScheduled = false;
-        renderEditor();
+        renderEditor(undefined, true);
     });
 }
 
-function renderEditor(groupId) {
+function renderEditor(groupId, allowTargetedUpdate = false) {
     const gid = groupId ?? state.activeGroupId;
     const group = state.groups?.find(g => g.id === gid);
     const filePath = group?.activeTab ?? null;
@@ -57,7 +57,42 @@ function renderEditor(groupId) {
 
     // Pre-load parent files then build cards
     preloadParents(protos).then(() => {
-        state.resolvedCache.clear();
+        // ── Targeted single-card update ─────────────────────────────────────
+        // When exactly one proto was edited (the common case), replace only
+        // that card's DOM instead of tearing down and rebuilding all N cards.
+        // Skipped when: structural changes, multi-proto edits, or a forced
+        // full render (direct renderEditor() call, undo/redo, etc.).
+        const pendingIdx = allowTargetedUpdate ? fs._pendingEditIdx : undefined;
+        fs._pendingEditIdx = undefined;
+
+        if (pendingIdx !== undefined && pendingIdx >= 0 && pendingIdx < protos.length) {
+            const existingCard = area.querySelector(`.proto-card[data-proto-idx="${pendingIdx}"]`);
+            if (existingCard) {
+                // Invalidate only the edited proto's resolved entry (and its
+                // direct in-file children) so buildCard sees fresh values.
+                const ep = protos[pendingIdx];
+                state.resolvedCache.delete(`${ep.type}:${ep.id}`);
+                for (const p of protos) {
+                    const pp = Array.isArray(p.parent) ? p.parent : (p.parent ? [p.parent] : []);
+                    if (p.type === ep.type && pp.includes(ep.id)) {
+                        state.resolvedCache.delete(`${p.type}:${p.id}`);
+                    }
+                }
+                try {
+                    const wasCollapsed = existingCard.classList.contains('collapsed');
+                    const newCard = buildCard(ep, pendingIdx, filePath);
+                    if (wasCollapsed) newCard.classList.add('collapsed');
+                    area.replaceChild(newCard, existingCard);
+                    return;
+                } catch (e) {
+                    console.error('[Editor] Targeted card update failed, falling back:', e);
+                    // fall through to full rebuild below
+                }
+            }
+        }
+
+        // ── Full rebuild ────────────────────────────────────────────────────
+        state.resolvedCache.clear(); state.protoLookup = null;
 
         // Save collapse state, scroll position, and focused field before re-render.
         const collapseState = saveCollapseState(area);

@@ -22,7 +22,10 @@ function setFieldValue(path, tag, value, filePath) {
     if (fs.doc) docSetField(fs.doc, path, tag, value);
     fs.dirtyProtos?.add(path[0]);
     fs.dirtySinceSave?.add(path[0]);
-    state.resolvedCache.clear();
+    // Track which proto index was edited so renderEditor can do a targeted update.
+    // -1 means multiple different protos were edited in the same frame → full rebuild.
+    fs._pendingEditIdx = (fs._pendingEditIdx === undefined || fs._pendingEditIdx === path[0])
+        ? path[0] : -1;
     commitChange(fs);
     scheduleRenderEditor();
 }
@@ -37,7 +40,8 @@ function deleteField(path, tag, filePath) {
     if (fs.doc) docDeleteField(fs.doc, path, tag);
     fs.dirtyProtos?.add(path[0]);
     fs.dirtySinceSave?.add(path[0]);
-    state.resolvedCache.clear();
+    fs._pendingEditIdx = (fs._pendingEditIdx === undefined || fs._pendingEditIdx === path[0])
+        ? path[0] : -1;
     commitChange(fs);
     scheduleRenderEditor();
 }
@@ -58,9 +62,8 @@ function commitChange(fs) {
     fs.doc = doc;
     fs.dirtyProtos = new Set();
     fs.structuralChange = false;
-    fs.pushHistory(nc);
+    fs.content = nc; fs.modified = true;
     relinkProtoAst(fs);
-    state.resolvedCache.clear();
     renderTabs(); scheduleAutosave(fs);
 }
 
@@ -97,7 +100,6 @@ function scheduleAutosave(fs) {
                 // Keep in-memory state coherent with what we just wrote: re-parse
                 // the merged text so future commits use ranges aligned with disk.
                 fs.content = payload;
-                fs.history[fs.historyIdx] = payload;
                 const { doc } = parseYamlDoc(payload);
                 fs.doc = doc;
                 relinkProtoAst(fs);
@@ -117,31 +119,4 @@ function scheduleAutosave(fs) {
     }, CFG.autosaveDelay);
 }
 
-// ======================== UNDO / REDO ==================================
-function handleUndo() {
-    const fs = state.openFiles.get(state.currentFile);
-    if (!fs || !fs.undo()) return;
-    const { protos, doc } = parseYamlDoc(fs.content);
-    fs.yaml = protos;
-    fs.doc = doc;
-    fs.dirtyProtos = new Set();
-    fs.dirtySinceSave = new Set();
-    fs.structuralChange = false;
-    relinkProtoAst(fs);
-    state.resolvedCache.clear();
-    renderEditor(); renderTabs(); scheduleAutosave(fs);
-}
 
-function handleRedo() {
-    const fs = state.openFiles.get(state.currentFile);
-    if (!fs || !fs.redo()) return;
-    const { protos, doc } = parseYamlDoc(fs.content);
-    fs.yaml = protos;
-    fs.doc = doc;
-    fs.dirtyProtos = new Set();
-    fs.dirtySinceSave = new Set();
-    fs.structuralChange = false;
-    relinkProtoAst(fs);
-    state.resolvedCache.clear();
-    renderEditor(); renderTabs(); scheduleAutosave(fs);
-}

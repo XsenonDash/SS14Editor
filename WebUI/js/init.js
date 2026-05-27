@@ -10,7 +10,7 @@ async function refreshAll() {
         const [tree] = await Promise.all([api.loadTree(), api.refreshIndex()]);
         state.fileTree = tree;
         state.protoIndex = await api.loadProtoIndex();
-        state.resolvedCache.clear();
+        state.resolvedCache.clear(); state.protoLookup = null;
         await refreshGitStatus();
         const treeEl = document.getElementById('file-tree');
         renderFileTree(state.fileTree, treeEl, document.getElementById('file-search').value);
@@ -114,10 +114,8 @@ function startFileEventStream() {
                 fs.dirtyProtos = new Set();
                 fs.dirtySinceSave = new Set();
                 fs.structuralChange = false;
-                fs.history = [content];
-                fs.historyIdx = 0;
                 relinkProtoAst(fs);
-                state.resolvedCache.clear();
+                state.resolvedCache.clear(); state.protoLookup = null;
                 // Re-render every group whose active tab is this file.
                 state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));
                 toast(`Reloaded: ${path.split('/').pop()}`, 'info');
@@ -181,7 +179,7 @@ async function init() {
 function openOtherRepository() {
     state.openFiles.clear();
     state.parentFileCache.clear();
-    state.resolvedCache.clear();
+    state.resolvedCache.clear(); state.protoLookup = null;
     state.fileTree   = null;
     state.protoIndex = null;
     state.metadata   = null;

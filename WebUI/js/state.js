@@ -11,6 +11,7 @@ const state = {
     openFiles  : new Map(),
     currentFile: null,
     resolvedCache: new Map(),
+    protoLookup: null,            // lazily-built Map<type:id → proto object> for O(1) resolveProto
     parentFileCache: new Map(),   // filePath → parsed yaml array (for inheritance lookup)
     expandedDirs: new Set(),      // tree directory paths that are currently expanded (preserved across re-renders)
     gitStatus  : null,            // { available, files: { 'rel/path.yml': 'new'|'modified'|'deleted'|'renamed'|'conflict' } }
@@ -28,19 +29,8 @@ class FileState {
         this.yaml           = null;
         this.doc            = null;
         this.modified       = false;
-        this.history        = [content];
-        this.historyIdx     = 0;
         this._saveTimer     = null;
         this.dirtyProtos    = new Set();
         this.dirtySinceSave = new Set();
     }
-    pushHistory(nc) {
-        this.history = this.history.slice(0, this.historyIdx + 1);
-        this.history.push(nc);
-        if (this.history.length > CFG.undoLimit) this.history.shift();
-        else this.historyIdx++;
-        this.content = nc; this.modified = true;
-    }
-    undo() { if (this.historyIdx <= 0) return false; this.content = this.history[--this.historyIdx]; this.modified = true; return true; }
-    redo() { if (this.historyIdx >= this.history.length - 1) return false; this.content = this.history[++this.historyIdx]; this.modified = true; return true; }
 }

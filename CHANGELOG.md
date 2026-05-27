@@ -1,5 +1,8 @@
 # Changelogs
 
+## v1.1.11
+- Optimization has been implemented to reduce app freezes when editing prototypes.
+
 ## v1.1.10
 - The project search now also searches by filename
 - Fixed issues with launching the editor on Linux via AppImage.

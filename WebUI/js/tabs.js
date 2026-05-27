@@ -359,8 +359,6 @@ async function openFile(path, targetGroupId) {
         const resp = await api.loadFile(path);
         if (!state.openFiles.has(path) || state.openFiles.get(path) !== placeholder) return;
         placeholder.content    = resp.content;
-        placeholder.history    = [resp.content];
-        placeholder.historyIdx = 0;
         const { protos, doc }  = parseYamlDoc(resp.content);
         placeholder.yaml       = protos;
         placeholder.doc        = doc;

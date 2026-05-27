@@ -35,7 +35,7 @@ function buildComponentsSection(proto, protoIdx, inherited, filePath) {
             delete fs.yaml[protoIdx].components;
             if (fs.doc) docDeleteField(fs.doc, [protoIdx], 'components');
             fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
-            state.resolvedCache.clear();
+            state.resolvedCache.clear(); state.protoLookup = null;
             commitChange(fs); renderEditor();
         });
         sec.querySelector('.components-header').appendChild(reset);

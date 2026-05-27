@@ -284,7 +284,7 @@ function _applyRawContentPatch(fs, result) {
     fs.doc = result.newDoc;
     fs.dirtySinceSave = new Set();
     relinkProtoAst(fs);
-    fs.pushHistory(result.newContent);
+    fs.modified = true;
     renderTabs();
     scheduleAutosave(fs);
     scheduleRenderEditor();
