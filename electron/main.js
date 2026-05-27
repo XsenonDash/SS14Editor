@@ -24,6 +24,14 @@ if (process.platform === 'linux') {
     // /dev/shm may be inaccessible inside the FUSE mount (ENOPROC / wrong perms).
     // This flag makes Chromium use a temp dir instead of /dev/shm for shared memory.
     app.commandLine.appendSwitch('disable-dev-shm-usage');
+    // memfd_create() fails with ESRCH inside some AppImage environments even
+    // with --no-sandbox, because an outer seccomp policy (e.g. SteamOS kernel)
+    // blocks the syscall before Chromium can disable its own filter.
+    // --disable-gpu-sandbox stops the GPU process from installing its own
+    // seccomp bpf, and --no-zygote prevents the pre-forked zygote (which runs
+    // before our flags are fully applied) from being reused with stale policies.
+    app.commandLine.appendSwitch('disable-gpu-sandbox');
+    app.commandLine.appendSwitch('no-zygote');
 }
 
 let mainWindow = null;
