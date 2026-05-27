@@ -9,6 +9,18 @@ const fs = require('fs');
 const PORT = 2701;
 const READY_RETRIES = 60;   // 60 × 500 ms = 30 s max wait
 
+// Linux AppImage launches into a FUSE-mounted, read-only filesystem where the
+// chrome-sandbox helper binary cannot be SUID-rooted. On distros that also
+// disable unprivileged user namespaces (Steam Deck / SteamOS, Debian, RHEL),
+// chromium then fails to start the renderer and the editor window never
+// appears — the user sees only the splash and the .NET server with no GUI.
+// `--no-sandbox` skips the SUID helper; we are already running a local-only
+// loopback HTTP server we trust, so this does not widen the attack surface.
+if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('no-sandbox');
+    app.commandLine.appendSwitch('disable-setuid-sandbox');
+}
+
 let mainWindow = null;
 let splashWindow = null;
 let tray = null;
