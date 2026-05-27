@@ -66,6 +66,27 @@
     }
 
     // -----------------------------------------------------------------
+    // Project → Update Metadata
+    // -----------------------------------------------------------------
+    const updateMetadataBtn = document.getElementById('hdr-update-metadata');
+    if (updateMetadataBtn) {
+        updateMetadataBtn.addEventListener('click', async () => {
+            updateMetadataBtn.disabled = true;
+            const orig = updateMetadataBtn.textContent;
+            updateMetadataBtn.textContent = 'Updating…';
+            try {
+                await api.updateMetadata();
+                await window.refreshMetadataInMemory?.();
+            } catch (err) {
+                window.toast?.(`Metadata update failed: ${err.message}`, 'error');
+            } finally {
+                updateMetadataBtn.textContent = orig;
+                updateMetadataBtn.disabled = false;
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------
     // Help → Changelogs
     // -----------------------------------------------------------------
     const changelogsBtn = document.getElementById('hdr-changelogs');

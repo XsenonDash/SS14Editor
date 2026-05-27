@@ -76,6 +76,7 @@ internal sealed partial class ApiRouter
             // Status / setup (StatusApi.cs)
             ["/api/status"] = HandleStatusAsync,
             ["/api/configure"] = HandleConfigureAsync,
+            ["/api/update-metadata"] = HandleUpdateMetadataAsync,
             ["/api/browse-folder"] = HandleBrowseFolderAsync,
             ["/api/close"] = HandleCloseAsync,
             ["/api/recent-projects"] = HandleRecentProjectsAsync,

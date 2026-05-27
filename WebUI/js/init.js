@@ -72,6 +72,28 @@ document.addEventListener('keydown', e => {
 });
 
 // ======================== FILE WATCHER (SSE) ============================
+// Reloads metadata and proto-index in memory and re-renders open editors.
+// Called by the "Update Metadata" button (via window.refreshMetadataInMemory)
+// and automatically when the server broadcasts a metadata-change SSE event.
+async function refreshMetadataInMemory() {
+    try {
+        const [m, i] = await Promise.all([
+            api.loadMetadata(),
+            api.loadProtoIndex(),
+        ]);
+        state.metadata = m;
+        state.protoIndex = i;
+        state.fileProtoIds = null;
+        state.resolvedCache.clear();
+        state.protoLookup = null;
+        state.groups.filter(g => g.activeTab).forEach(g => renderEditor(g.id));
+        toast('Metadata updated', 'success');
+    } catch (e) {
+        toast('Metadata reload failed: ' + e.message, 'error');
+    }
+}
+window.refreshMetadataInMemory = refreshMetadataInMemory;
+
 // The server pushes "file-change" events over an SSE channel; we react by
 // reloading any open file whose external timestamp changed and the user hasn't
 // modified locally. Falls back silently if EventSource is unavailable.
@@ -87,7 +109,12 @@ function startFileEventStream() {
         es.onmessage = async (ev) => {
             let payload;
             try { payload = JSON.parse(ev.data); } catch { return; }
-            if (!payload || payload.type !== 'file-change') return;
+            if (!payload) return;
+            if (payload.type === 'metadata-change') {
+                refreshMetadataInMemory();
+                return;
+            }
+            if (payload.type !== 'file-change') return;
             // Any file change (ours or external) can shift git status: schedule
             // a refresh so tree + tabs re-colour.
             scheduleGitRefresh();

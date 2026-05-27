@@ -184,7 +184,11 @@ function controlFor(meta, value, dis, onChange) {
     // value into "[object Object],[object Object],...".
     const primKinds = { boolean: 1, integer: 1, float: 1, text: 1, color: 1, enum: 1, flags: 1, entityProtoId: 1, protoId: 1, timespan: 1 };
     if (primKinds[kind] && value !== null && typeof value === 'object') {
-        return autoControl(value, dis, onChange, meta.fullType || meta.type);
+        // Flags are commonly represented as YAML string arrays (e.g. ["WallLayer"]),
+        // so keep them on the dedicated flags control instead of falling back.
+        if (!(kind === 'flags' && Array.isArray(value))) {
+            return autoControl(value, dis, onChange, meta.fullType || meta.type);
+        }
     }
 
     switch (kind) {
@@ -359,6 +363,18 @@ function flagsCtrl(val, opts, dis, cb) {
     updateLabel();
 
     const dd = _div('flags-dropdown');
+    let lastEmitted = Array.isArray(val)
+        ? val.map(v => String(v)).filter(v => v !== 'NONE' && v !== 'None' && v !== '0').sort().join(',')
+        : (typeof val === 'string' && val && val !== 'None' && val !== 'NONE' && val !== '0' ? val : '');
+
+    function commitIfChanged() {
+        const arr = [...selected].filter(f => f !== 'NONE' && f !== 'None' && f !== '0');
+        const next = arr.slice().sort().join(',');
+        if (next === lastEmitted) return;
+        lastEmitted = next;
+        cb(arr.length ? arr : 'None');
+    }
+
     // Filter out NONE/0 from options
     const validOpts = opts.filter(o => o !== 'NONE' && o !== 'None' && o !== '0');
     for (const o of validOpts) {
@@ -368,8 +384,6 @@ function flagsCtrl(val, opts, dis, cb) {
         chk.addEventListener('change', () => {
             if (chk.checked) selected.add(o); else selected.delete(o);
             updateLabel();
-            const arr = [...selected].filter(f => f !== 'NONE' && f !== 'None' && f !== '0');
-            cb(arr.length ? arr : 'None');
         });
         row.append(chk, lbl);
         dd.appendChild(row);
@@ -377,11 +391,20 @@ function flagsCtrl(val, opts, dis, cb) {
 
     toggle.addEventListener('click', e => {
         e.stopPropagation();
-        dd.classList.toggle('visible');
+        const isOpen = dd.classList.contains('visible');
+        if (isOpen) {
+            commitIfChanged();
+            dd.classList.remove('visible');
+        } else {
+            dd.classList.add('visible');
+        }
     });
     // Close dropdown when clicking outside
     document.addEventListener('click', e => {
-        if (!w.contains(e.target)) dd.classList.remove('visible');
+        if (!w.contains(e.target) && dd.classList.contains('visible')) {
+            commitIfChanged();
+            dd.classList.remove('visible');
+        }
     });
     w.append(toggle, dd); return w;
 }

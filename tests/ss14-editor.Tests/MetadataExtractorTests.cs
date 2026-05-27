@@ -118,4 +118,52 @@ public class MetadataExtractorTests
         var metaPath = Path.Combine(outputDir, "metadata.json");
         Assert.False(File.Exists(metaPath));
     }
+
+    /// <summary>
+    /// Verifies that FlagSerializer&lt;TTag&gt; fields are resolved to "flags" kind
+    /// when the corresponding [FlagsFor(typeof(TTag))] enum is present in the
+    /// same assembly — the exact pattern used by Fixture.CollisionLayer/Mask
+    /// in RobustToolbox.
+    /// </summary>
+    [Fact]
+    public void Extract_FlagSerializer_ResolvesEnumValues()
+    {
+        using var tmp = StageFixtureAsContentServer();
+        using var doc = RunAndRead(tmp.Path);
+
+        var dds = doc.RootElement.GetProperty("dataDefinitions");
+
+        // Find FixturePhysicsData by shortName (key is fully-qualified name).
+        JsonElement? physDD = null;
+        foreach (var kv in dds.EnumerateObject())
+        {
+            if (kv.Value.GetProperty("shortName").GetString() == "FixturePhysicsData")
+            {
+                physDD = kv.Value;
+                break;
+            }
+        }
+        Assert.True(physDD.HasValue, "FixturePhysicsData data definition not found in metadata");
+
+        var fields = physDD.Value.GetProperty("fields").EnumerateArray().ToList();
+
+        // --- layer field ---
+        var layerField = fields.Single(f => f.GetProperty("tag").GetString() == "layer");
+        Assert.Equal("flags", layerField.GetProperty("fieldKind").GetString());
+
+        var layerEnumVals = layerField.GetProperty("enumValues").EnumerateArray()
+            .Select(e => e.GetString()!).ToList();
+        Assert.Contains("WallLayer", layerEnumVals);
+        Assert.Contains("MobLayer", layerEnumVals);
+        Assert.Contains("FullTileMask", layerEnumVals);
+
+        // --- mask field ---
+        var maskField = fields.Single(f => f.GetProperty("tag").GetString() == "mask");
+        Assert.Equal("flags", maskField.GetProperty("fieldKind").GetString());
+
+        var maskEnumVals = maskField.GetProperty("enumValues").EnumerateArray()
+            .Select(e => e.GetString()!).ToList();
+        Assert.Contains("WallLayer", maskEnumVals);
+        Assert.Contains("MobLayer", maskEnumVals);
+    }
 }

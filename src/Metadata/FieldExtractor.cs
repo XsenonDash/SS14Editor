@@ -73,17 +73,20 @@ public sealed class FieldExtractor
     private readonly XmlDocReader _xmlDocs;
     private readonly Dictionary<string, DataDefinitionMetadata> _dataDefinitions;
     private readonly CtorDefaultsScanner? _defaultsScanner;
+    private readonly Dictionary<string, Type> _flagTagToEnumType;
 
     public FieldExtractor(XmlDocReader xmlDocs, Dictionary<string, DataDefinitionMetadata> dataDefinitions)
         : this(xmlDocs, dataDefinitions, null) { }
 
     public FieldExtractor(XmlDocReader xmlDocs,
         Dictionary<string, DataDefinitionMetadata> dataDefinitions,
-        CtorDefaultsScanner? defaultsScanner)
+        CtorDefaultsScanner? defaultsScanner,
+        Dictionary<string, Type>? flagTagToEnumType = null)
     {
         _xmlDocs = xmlDocs;
         _dataDefinitions = dataDefinitions;
         _defaultsScanner = defaultsScanner;
+        _flagTagToEnumType = flagTagToEnumType ?? new Dictionary<string, Type>();
     }
 
     public List<FieldMetadata> ExtractDataFields(Type type)
@@ -215,6 +218,12 @@ public sealed class FieldExtractor
         };
 
         EnrichFieldTypeInfo(meta, memberType);
+
+        // customTypeSerializer overrides: detected serializer type takes
+        // precedence over whatever ClassifyType inferred from the C# type.
+        var customSer = GetCustomTypeSerializer(dfAttr);
+        if (customSer != null)
+            ApplyCustomSerializer(meta, customSer);
 
         // Schema default (from C# field initializer IL). Looked up against
         // the declaring type so a base class's defaults aren't shadowed by a
@@ -742,5 +751,126 @@ public sealed class FieldExtractor
         {
             return null;
         }
+    }
+
+    private static Type? GetCustomTypeSerializer(CustomAttributeData attr)
+    {
+        // Named-argument form: [DataField(..., CustomTypeSerializer = typeof(...))] (rare but possible)
+        foreach (var na in attr.NamedArguments)
+            if ((na.MemberName == "CustomTypeSerializer" || na.MemberName == "customTypeSerializer")
+                && na.TypedValue.Value is Type nt)
+                return nt;
+
+        // Positional form: customTypeSerializer is the only constructor arg of type Type.
+        // Its index varies across RobustToolbox forks:
+        //   5-param ctor (older):  (tag, readOnly, priority, required, customTypeSerializer)  → index 4
+        //   6-param ctor (newer):  (tag, readOnly, priority, required, serverOnly, customTypeSerializer) → index 5
+        // Walk from the end; the first Type value we find is customTypeSerializer.
+        for (var i = attr.ConstructorArguments.Count - 1; i >= 1; i--)
+            if (attr.ConstructorArguments[i].Value is Type ct)
+                return ct;
+
+        return null;
+    }
+
+    private static (string kind, string? protoTypeArg) ResolveProtoKindAndArg(Type protoType)
+    {
+        if (protoType.Name == "EntityPrototype")
+            return ("entityProtoId", null);
+        foreach (var a in protoType.GetCustomAttributesData())
+        {
+            if (a.AttributeType.Name == "PrototypeAttribute" &&
+                a.ConstructorArguments.Count > 0 &&
+                a.ConstructorArguments[0].Value is string pn &&
+                !string.IsNullOrEmpty(pn))
+                return ("protoId", pn);
+        }
+        var name = protoType.Name;
+        if (name.EndsWith("Prototype")) name = name[..^"Prototype".Length];
+        return ("protoId", char.ToLowerInvariant(name[0]) + name[1..]);
+    }
+
+    private void ApplyCustomSerializer(FieldMetadata meta, Type serType)
+    {
+        var name = serType.Name;
+        try
+        {
+            if (name.StartsWith("FlagSerializer") && serType.IsGenericType)
+            {
+                var tTag = serType.GetGenericArguments()[0];
+                string[]? vals = null;
+                // Try FlagsFor lookup first (TTag is an empty tag class)
+                var tagFull = tTag.FullName ?? tTag.Name;
+                if (_flagTagToEnumType.TryGetValue(tagFull, out var enumType))
+                    vals = SafeEnumValues(enumType);
+                // TTag itself may be a [Flags] enum in some forks
+                else if (tTag.IsEnum && tTag.CustomAttributes.Any(
+                    a => a.AttributeType.Name == "FlagsAttribute"))
+                    vals = SafeEnumValues(tTag);
+                meta.FieldKind = "flags";
+                meta.EnumValues = vals;
+                meta.ProtoTypeArg = null;
+                meta.Element = null; meta.Key = null; meta.Value = null;
+            }
+            else if (name.StartsWith("PrototypeIdSerializer") && serType.IsGenericType)
+            {
+                var tProto = serType.GetGenericArguments()[0];
+                var (kind, arg) = ResolveProtoKindAndArg(tProto);
+                meta.FieldKind = kind;
+                meta.ProtoTypeArg = arg;
+                meta.EnumValues = null;
+                meta.Element = null; meta.Key = null; meta.Value = null;
+            }
+            else if (name.StartsWith("PrototypeIdHashSetSerializer") && serType.IsGenericType)
+            {
+                var tProto = serType.GetGenericArguments()[0];
+                var (kind, arg) = ResolveProtoKindAndArg(tProto);
+                meta.FieldKind = "list";
+                meta.EnumValues = null; meta.ProtoTypeArg = null;
+                meta.Key = null; meta.Value = null;
+                meta.Element = new FieldTypeNode { Kind = kind, ProtoTypeArg = arg };
+            }
+            else if ((name.StartsWith("PrototypeIdDictionarySerializer") ||
+                      name.StartsWith("PrototypeIdValueDictionarySerializer")) &&
+                     serType.IsGenericType)
+            {
+                // Generic args: [TValue, TProto]
+                var args = serType.GetGenericArguments();
+                if (args.Length >= 2)
+                {
+                    var (keyKind, keyArg) = ResolveProtoKindAndArg(args[1]);
+                    meta.FieldKind = "map";
+                    meta.EnumValues = null; meta.ProtoTypeArg = null; meta.Element = null;
+                    meta.Key = new FieldTypeNode { Kind = keyKind, ProtoTypeArg = keyArg };
+                    meta.Value = BuildTypeNode(args[0], 0);
+                }
+            }
+            else if (name.StartsWith("DictionarySerializer") && serType.IsGenericType)
+            {
+                var args = serType.GetGenericArguments();
+                if (args.Length >= 2)
+                {
+                    meta.FieldKind = "map";
+                    meta.EnumValues = null; meta.ProtoTypeArg = null; meta.Element = null;
+                    meta.Key = BuildTypeNode(args[0], 0);
+                    meta.Value = BuildTypeNode(args[1], 0);
+                }
+            }
+            else if (name == "ResPathSerializer")
+            {
+                meta.FieldKind = "resPath";
+                meta.EnumValues = null; meta.ProtoTypeArg = null;
+                meta.Element = null; meta.Key = null; meta.Value = null;
+            }
+            else if (name == "EnumSerializer")
+            {
+                meta.FieldKind = "enum";
+                meta.EnumValues = null; meta.ProtoTypeArg = null;
+                meta.Element = null; meta.Key = null; meta.Value = null;
+            }
+            // TimeOffsetSerializer, ComponentNameSerializer, ConstantSerializer,
+            // FixtureSerializer, etc.: leave unchanged — runtime or opaque data.
+        }
+        catch { /* ignore — keep whatever ClassifyType produced */ }
     }
 }

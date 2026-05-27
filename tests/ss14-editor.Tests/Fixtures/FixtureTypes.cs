@@ -34,6 +34,17 @@ internal sealed class DataFieldAttribute : Attribute
     // 4-arg ctor used by ResolveRequired's positional-arg path.
     public DataFieldAttribute(string tag, Type? serializer, bool readOnly, bool required)
     { Tag = tag; Required = required; }
+    // 6-arg ctor matching real RobustToolbox DataFieldAttribute:
+    // (tag, readOnly, priority, required, serverOnly, customTypeSerializer)
+    public DataFieldAttribute(string? tag, bool readOnly, int priority, bool required, bool serverOnly, Type? customTypeSerializer)
+    { Tag = tag; Required = required; }
+}
+
+[AttributeUsage(AttributeTargets.Enum, AllowMultiple = true)]
+internal sealed class FlagsForAttribute : Attribute
+{
+    public Type Tag { get; }
+    public FlagsForAttribute(Type tag) { Tag = tag; }
 }
 
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
@@ -211,5 +222,41 @@ internal sealed class FixtureVectorTimespanDef
     [DataField] public TimeSpan Duration;
 }
 
+// ---------- FlagSerializer / FlagsFor fixtures ----------
+// Mirrors how RobustToolbox resolves collision layer / mask fields:
+//   - Two empty tag classes (like CollisionLayer / CollisionMask)
+//   - One [Flags] enum annotated with [FlagsFor] for both tags
+//   - FlagSerializer<T> stub (MetadataExtractor recognises by Name prefix)
+//   - A DataDefinition whose fields use the 6-arg DataField ctor with
+//     customTypeSerializer at index 5, exactly like Fixture.cs in SS14
 
+// Tag classes — empty marker types.
+internal sealed class FixtureCollisionTag { }
+internal sealed class FixtureCollisionMask { }
 
+// Enum shared by both tags, matching the real CollisionGroup pattern.
+[Flags]
+[FlagsFor(typeof(FixtureCollisionTag))]
+[FlagsFor(typeof(FixtureCollisionMask))]
+internal enum FixtureCollisionGroup
+{
+    None       = 0,
+    WallLayer  = 1 << 0,
+    MobLayer   = 1 << 1,
+    FullTileMask = WallLayer | MobLayer,
+}
+
+// Minimal stub; MetadataExtractor only checks the type Name, not its members.
+internal sealed class FlagSerializer<T> { }
+
+[DataDefinition]
+internal sealed class FixturePhysicsData
+{
+    // 6-arg ctor: (tag, readOnly, priority, required, serverOnly, customTypeSerializer)
+    // customTypeSerializer is at index 5 — the main path for real SS14 fixtures.
+    [DataField("layer", false, 1, false, false, typeof(FlagSerializer<FixtureCollisionTag>))]
+    public int CollisionLayer;
+
+    [DataField("mask", false, 1, false, false, typeof(FlagSerializer<FixtureCollisionMask>))]
+    public int CollisionMask;
+}

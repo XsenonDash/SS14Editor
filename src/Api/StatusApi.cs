@@ -10,6 +10,35 @@ namespace Content.Editor.Editor;
 
 internal sealed partial class ApiRouter
 {
+    private async Task HandleUpdateMetadataAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        var ctx = _ctx;
+        if (ctx == null)
+        {
+            await HttpJson.WriteErrorAsync(res, 503, "No project configured.");
+            return;
+        }
+        var solutionRoot = ctx.SolutionRoot;
+        var dataDir = ctx.EditorDir;
+
+        await _configureGate.WaitAsync();
+        try
+        {
+            await Task.Run(() =>
+            {
+                var cachePath = Path.Combine(dataDir, "metadata.cache.txt");
+                if (File.Exists(cachePath)) File.Delete(cachePath);
+                Logger.Info($"Re-extracting metadata for: {solutionRoot}");
+                MetadataExtractor.Extract(solutionRoot, dataDir);
+            });
+        }
+        finally
+        {
+            _configureGate.Release();
+        }
+        await HttpJson.WriteAsync(res, new { ok = true });
+    }
+
     private Task HandleStatusAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
         var version = Assembly.GetExecutingAssembly()
@@ -110,6 +139,20 @@ internal sealed partial class ApiRouter
                 captured.ProtoIndex.Rebuild();
                 Logger.Info($"Indexed {captured.ProtoIndex.TotalCount} prototypes across {captured.ProtoIndex.TypeCount} types");
                 captured.FileWatcher.Start();
+
+                captured.DllWatcher.Changed += () =>
+                {
+                    var sRoot = captured.SolutionRoot;
+                    var dDir  = captured.EditorDir;
+                    Task.Run(() =>
+                    {
+                        Logger.Info($"DLL change detected, re-extracting metadata for: {sRoot}");
+                        var cachePath = Path.Combine(dDir, "metadata.cache.txt");
+                        if (File.Exists(cachePath)) File.Delete(cachePath);
+                        MetadataExtractor.Extract(sRoot, dDir);
+                        captured.Events.Broadcast(new { type = "metadata-change" });
+                    });
+                };
             });
         }
         catch (Exception ex)

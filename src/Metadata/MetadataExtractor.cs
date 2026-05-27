@@ -90,7 +90,6 @@ public static class MetadataExtractor
         // result is keyed by Type.FullName so it matches whatever
         // MetadataLoadContext later resolves while extracting fields.
         var defaultsScanner = new CtorDefaultsScanner();
-        var fieldExtractor = new FieldExtractor(xmlDocs, dataDefinitions, defaultsScanner);
 
         var prototypes = new Dictionary<string, PrototypeMetadata>();
         var components = new Dictionary<string, ComponentMetadata>();
@@ -104,6 +103,9 @@ public static class MetadataExtractor
         var dataDefTypes = new Dictionary<string, Type>();
         var protoTypes  = new Dictionary<string, Type>();
         var compTypes   = new Dictionary<string, Type>();
+        // FlagSerializer<TTag> resolution: tag-type.FullName -> flags enum Type,
+        // built during Pass 1 by scanning [FlagsFor] attributes on enum types.
+        var flagTagToEnumType = new Dictionary<string, Type>();
         var skippedAssemblies = 0;
         var skippedTypes = 0;
 
@@ -122,7 +124,7 @@ public static class MetadataExtractor
                     var assembly = mlc.LoadFromAssemblyPath(dllPath);
                     DiscoverAssembly(assembly, prototypes, components, dataDefinitions,
                         polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs,
-                        ref skippedTypes);
+                        flagTagToEnumType, ref skippedTypes);
                 }
                 catch (Exception ex)
                 {
@@ -139,6 +141,8 @@ public static class MetadataExtractor
                 { Logger.Warn($"Defaults scan failed for {fileName}: {ex.Message}"); }
             }
         }
+
+        var fieldExtractor = new FieldExtractor(xmlDocs, dataDefinitions, defaultsScanner, flagTagToEnumType);
 
         // === PASS 2: Field extraction =====================================
         // dataDefinitions/polymorphicTypes are now fully populated, so
@@ -251,6 +255,7 @@ public static class MetadataExtractor
         Dictionary<string, Type> protoTypes,
         Dictionary<string, Type> compTypes,
         XmlDocReader xmlDocs,
+        Dictionary<string, Type> flagTagToEnumType,
         ref int skippedTypes)
     {
         Type[] types;
@@ -269,7 +274,7 @@ public static class MetadataExtractor
             try
             {
                 DiscoverType(type, prototypes, components, dataDefinitions,
-                    polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs);
+                    polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs, flagTagToEnumType);
             }
             catch (Exception ex)
             {
@@ -304,8 +309,24 @@ public static class MetadataExtractor
         Dictionary<string, Type> dataDefTypes,
         Dictionary<string, Type> protoTypes,
         Dictionary<string, Type> compTypes,
-        XmlDocReader xmlDocs)
+        XmlDocReader xmlDocs,
+        Dictionary<string, Type> flagTagToEnumType)
     {
+        // Collect FlagsFor mapping: enables FlagSerializer<TTag> resolution in FieldExtractor.
+        if (type.IsEnum)
+        {
+            foreach (var a in type.CustomAttributes)
+            {
+                if (a.AttributeType.Name == "FlagsForAttribute" &&
+                    a.ConstructorArguments.Count >= 1 &&
+                    a.ConstructorArguments[0].Value is Type tagType)
+                {
+                    var tagFull = tagType.FullName ?? tagType.Name;
+                    flagTagToEnumType.TryAdd(tagFull, type);
+                }
+            }
+        }
+
         // Scan DataDefinition types (BOTH abstract bases and concrete
         // implementors – abstract bases are needed so the editor can resolve
         // `List<TBase>` element types, and to pick !type: subtypes).

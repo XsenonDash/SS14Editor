@@ -116,6 +116,11 @@ public static class EditorServer
             SourceLocator = new SourceLocator(solutionRoot),
             Events = new EventStreamService(),
             FileWatcher = new FileWatcherService(prototypesDir),
+            DllWatcher = new MetadataDllWatcherService(new[]
+            {
+                Path.Combine(solutionRoot, "bin", "Content.Server"),
+                Path.Combine(solutionRoot, "bin", "Content.Client"),
+            }),
         };
     }
 

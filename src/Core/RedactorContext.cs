@@ -40,6 +40,7 @@ internal sealed class EditorContext : IDisposable
     public required SourceLocator SourceLocator { get; init; }
     public required EventStreamService Events { get; init; }
     public required FileWatcherService FileWatcher { get; init; }
+    public required MetadataDllWatcherService DllWatcher { get; init; }
 
     private int _refs = 1;
     private int _disposed; // 0 = alive, 1 = cleanup ran
@@ -114,6 +115,7 @@ internal sealed class EditorContext : IDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         try { FileWatcher.Dispose(); } catch (Exception ex) { Logger.Warn($"FileWatcher dispose failed: {ex.Message}"); }
+        try { DllWatcher.Dispose(); } catch (Exception ex) { Logger.Warn($"DllWatcher dispose failed: {ex.Message}"); }
         try { Events.Dispose(); } catch (Exception ex) { Logger.Warn($"Events dispose failed: {ex.Message}"); }
     }
 }

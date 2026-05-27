@@ -3,6 +3,9 @@
 ## v1.1.12
 - Hovering over a component now displays the XML summary from the code.
 - Dictionary entries can now be edited after they have been created.
+- Added the ability to rebuild project metadata manually.
+- Rebuilding the SS14 project (changes to DLL files) automatically triggers a rebuild of the metadata.
+- Support for the `customTypeSerializer` has been added for certain types. This allows, for example, proper editing of mask flags and collision layer flags within the `FixturesComponent`.
 
 ## v1.1.11
 - Optimization has been implemented to reduce app freezes when editing prototypes.
