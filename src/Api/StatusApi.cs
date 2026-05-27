@@ -136,25 +136,18 @@ internal sealed partial class ApiRouter
 
     /// <summary>
     /// Opens a native folder-picker dialog on the user's machine and returns
-    /// the chosen path. Windows-only — uses PowerShell + WinForms so we don't
-    /// need to pull WinForms into the main project's TFM. The dialog runs in
-    /// a short-lived child process that prints exactly one line (the selected
-    /// path, or empty on cancel). Server-side endpoint only makes sense when
-    /// the editor is being used locally on the same machine that runs the
-    /// browser, which is the only supported topology.
+    /// the chosen path. Routes to IFileOpenDialog on Windows, zenity/kdialog
+    /// on Linux, and osascript on macOS. If no graphical picker is available
+    /// the endpoint returns an empty path so the WebUI falls back to its
+    /// manual text-entry form (which is the documented fallback already in
+    /// the project-picker UI).
     /// </summary>
     private async Task HandleBrowseFolderAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            await HttpJson.WriteErrorAsync(res, 501, "Native folder picker is only available on Windows.");
-            return;
-        }
-
         string? selected;
         try
         {
-            selected = await Task.Run(() => ModernFolderPicker.Pick("Select your SS14 project folder"));
+            selected = await Task.Run(() => CrossPlatformFolderPicker.Pick("Select your SS14 project folder"));
         }
         catch (Exception ex)
         {

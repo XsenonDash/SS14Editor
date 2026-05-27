@@ -70,24 +70,37 @@ function startServer() {
 // let us swap to the editor too early and show a half-loaded page.
 // ---------------------------------------------------------------------------
 function waitForServer(onReady, retriesLeft = READY_RETRIES) {
-    const req = http.get(`http://localhost:${PORT}/api/status`, res => {
-        // Drain so the socket can be reused.
-        res.resume();
-        if (res.statusCode === 200) onReady();
-        else {
-            setTimeout(() => waitForServer(onReady, retriesLeft - 1), 500);
-        }
-    });
-    req.setTimeout(400, () => req.destroy(new Error('timeout')));
-    req.on('error', () => {
-        if (retriesLeft <= 0) {
-            console.error('[electron] Server did not become ready in time. Quitting.');
-            app.quit();
-            return;
-        }
-        setTimeout(() => waitForServer(onReady, retriesLeft - 1), 500);
-    });
-    req.end();
+    // `done` guards against the rare case where /api/status returns 200
+    // and we call onReady, but the underlying socket's idle timeout fires
+    // (or a stale retry was already scheduled) — without this guard the
+    // recursion keeps polling until retries exhaust and we wrongly quit
+    // the running app with "Server did not become ready in time".
+    let done = false;
+    const tryOnce = (left) => {
+        if (done) return;
+        const req = http.get(`http://localhost:${PORT}/api/status`, res => {
+            res.resume();
+            if (done) return;
+            if (res.statusCode === 200) {
+                done = true;
+                onReady();
+            } else if (!done) {
+                setTimeout(() => tryOnce(left - 1), 500);
+            }
+        });
+        req.setTimeout(400, () => req.destroy(new Error('timeout')));
+        req.on('error', () => {
+            if (done) return;
+            if (left <= 0) {
+                console.error('[electron] Server did not become ready in time. Quitting.');
+                app.quit();
+                return;
+            }
+            setTimeout(() => tryOnce(left - 1), 500);
+        });
+        req.end();
+    };
+    tryOnce(retriesLeft);
 }
 
 // ---------------------------------------------------------------------------
