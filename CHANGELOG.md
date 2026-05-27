@@ -1,5 +1,8 @@
 # Changelogs
 
+## v1.1.12
+- Hovering over a component now displays the XML summary from the code.
+
 ## v1.1.11
 - Optimization has been implemented to reduce app freezes when editing prototypes.
 - Fixed a major freeze in the editor during file searches.

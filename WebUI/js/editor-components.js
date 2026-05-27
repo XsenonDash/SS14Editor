@@ -140,7 +140,10 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
     card.dataset.compType = compType;
     const cMeta = state.metadata?.components?.[compType];
     const hdr = _div('component-header');
-    hdr.innerHTML = `<span class="component-type" title="${esc(cMeta?.summary || '')}">${esc(compType)}</span>`;
+    const compTipParts = [];
+    if (cMeta?.summary) compTipParts.push(cMeta.summary);
+    if (cMeta?.className) compTipParts.push(`class: ${cMeta.className}`);
+    hdr.innerHTML = `<span class="component-type" title="${esc(compTipParts.join('\n'))}">${esc(compType)}</span>`;
     // Eye-icon collapse toggle, right after the component name. The reset
     // / remove button (when present) appears AFTER the eye, matching the
     // field-row pattern "label: data [eye] [reset/delete]".
