@@ -214,7 +214,7 @@ function _makeTab(path, group) {
     tab.className = `tab${path === group.activeTab ? ' active' : ''}${gitClass}`;
     tab.dataset.path = path;
     tab.draggable = true;
-    const shortName = path.split('/').pop() + (fs?.modified ? ' •' : '');
+    const shortName = (fs?.displayName ?? path.split('/').pop()) + (fs?.modified ? ' •' : '');
     tab.innerHTML = `<span class="tab-name">${esc(shortName)}</span><button class="tab-close" tabindex="-1">×</button>`;
 
     tab.querySelector('.tab-name').addEventListener('click', () => switchTab(path, group.id));
@@ -314,6 +314,36 @@ async function openFile(path, targetGroupId) {
     if (state.openFiles.has(path)) {
         renderTabs();
         renderEditor(group.id);
+        return;
+    }
+
+    // Virtual tabs (no backing file): __changelog__ → embedded CHANGELOG.md
+    // rendered as markdown. Bypasses the YAML pipeline entirely.
+    if (path === '__changelog__') {
+        const placeholder = new FileState(path, '');
+        placeholder.loading = true;
+        placeholder.yaml = [];
+        placeholder.readOnly = true;
+        placeholder.isChangelog = true;
+        placeholder.displayName = 'Changelogs';
+        state.openFiles.set(path, placeholder);
+        renderTabs();
+        renderEditor(group.id);
+        try {
+            const r = await fetch('/api/changelog');
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            if (!state.openFiles.has(path) || state.openFiles.get(path) !== placeholder) return;
+            placeholder.changelogText = j.content ?? '';
+            placeholder.loading = false;
+            renderTabs();
+            state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));
+        } catch (e) {
+            console.error('[Tabs] Changelog open failed:', e);
+            placeholder.changelogText = `# Failed to load changelog\n\n\`${e.message}\``;
+            placeholder.loading = false;
+            state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));
+        }
         return;
     }
 
@@ -462,4 +492,7 @@ function _syncCurrentFile() {
 // Render initial empty state as soon as the DOM is available so the
 // editor area isn't a blank void before any file is opened.
 document.addEventListener('DOMContentLoaded', () => renderGroups());
+
+// Public entry point used by Help → Changelogs.
+window.openChangelogTab = function () { return openFile('__changelog__'); };
 

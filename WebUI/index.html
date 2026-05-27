@@ -26,6 +26,12 @@
                     <button class="app-header-dropdown-item" id="hdr-open-other" type="button">Open other repository</button>
                 </div>
             </div>
+            <div class="app-header-menu" data-menu="help">
+                <button class="app-header-menu-btn" type="button">Help</button>
+                <div class="app-header-menu-dropdown">
+                    <button class="app-header-dropdown-item" id="hdr-changelogs" type="button">Changelogs</button>
+                </div>
+            </div>
             <!-- Update button sits next to the menu items (not pushed right) and
                  is hidden until the Electron main process pushes `update-available`. -->
             <button id="hdr-update-btn" class="app-header-update" type="button" hidden>
@@ -126,6 +132,7 @@
     <script src="js/editor-components.js"></script>
     <script src="js/editor-add.js"></script>
     <script src="js/app-header.js"></script>
+    <script src="js/markdown.js"></script>
     <script src="js/init.js"></script>
 </body>
 </html>

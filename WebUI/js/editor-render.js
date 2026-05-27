@@ -41,6 +41,13 @@ function renderEditor(groupId) {
         area.innerHTML = `<div class="editor-loading"><div class="editor-spinner"></div><div class="editor-loading-label">Loading ${esc(filePath.split('/').pop())}\u2026</div></div>`;
         return;
     }
+    if (fs.isChangelog) {
+        const html = (typeof renderMarkdown === 'function')
+            ? renderMarkdown(fs.changelogText ?? '')
+            : esc(fs.changelogText ?? '');
+        area.innerHTML = `<div class="markdown-view">${html}</div>`;
+        return;
+    }
     const protos = fs.yaml;
     if (!Array.isArray(protos) || protos.length === 0) {
         area.innerHTML = '<div class="empty-state"><p>No prototypes found in this file.</p></div>';

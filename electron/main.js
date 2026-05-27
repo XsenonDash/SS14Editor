@@ -17,8 +17,13 @@ const READY_RETRIES = 60;   // 60 × 500 ms = 30 s max wait
 // `--no-sandbox` skips the SUID helper; we are already running a local-only
 // loopback HTTP server we trust, so this does not widen the attack surface.
 if (process.platform === 'linux') {
+    // chrome-sandbox needs SUID root or unprivileged user namespaces.
+    // Neither works inside a FUSE AppImage on Steam Deck / SteamOS / Debian.
     app.commandLine.appendSwitch('no-sandbox');
     app.commandLine.appendSwitch('disable-setuid-sandbox');
+    // /dev/shm may be inaccessible inside the FUSE mount (ENOPROC / wrong perms).
+    // This flag makes Chromium use a temp dir instead of /dev/shm for shared memory.
+    app.commandLine.appendSwitch('disable-dev-shm-usage');
 }
 
 let mainWindow = null;
@@ -56,9 +61,27 @@ function getServerBinary() {
 }
 
 // ---------------------------------------------------------------------------
+// Kill any stale ss14-editor process that is still holding PORT from a
+// previous crashed run. On Linux we use `fuser -k <port>/tcp` (available on
+// virtually every distro); on other platforms we silently skip.
+// This is best-effort: if fuser isn't present, we ignore the error and let
+// the .NET server fail to bind — the user will see the error in the console.
+// ---------------------------------------------------------------------------
+async function killStaleServer() {
+    if (process.platform !== 'linux') return;
+    return new Promise(resolve => {
+        const killer = spawn('fuser', ['-k', `${PORT}/tcp`], { stdio: 'ignore' });
+        killer.on('close', () => resolve());
+        killer.on('error', () => resolve()); // fuser not installed — ignore
+        setTimeout(() => { killer.kill(); resolve(); }, 2000); // cap at 2 s
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Start the .NET HTTP server
 // ---------------------------------------------------------------------------
-function startServer() {
+async function startServer() {
+    await killStaleServer();
     const binary = getServerBinary();
     // Spawn with no argv: the server starts in setup mode and the WebUI
     // always shows the project picker. Earlier builds passed `serve`, which
@@ -362,13 +385,10 @@ app.whenReady().then(() => {
     createTray();
 
     // 3. Start the .NET server in parallel.
-    try {
-        startServer();
-    } catch (err) {
+    startServer().catch(err => {
         dialog.showErrorBox('SS14 Editor – startup error', String(err));
         app.quit();
-        return;
-    }
+    });
 
     // 4. Once /api/status responds, load the real WebUI into the hidden
     //    main window. `ready-to-show` (registered in createMainWindow)

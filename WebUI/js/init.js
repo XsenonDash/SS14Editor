@@ -164,6 +164,8 @@ async function init() {
     if (!status.configured) {
         // Overlay is already visible — nothing more to do until the user
         // picks a project and `tryOpen` calls `loadEditorData()`.
+        // Open changelog in the background so something useful is visible.
+        window.openChangelogTab?.();
         return;
     }
 
@@ -490,6 +492,11 @@ async function loadEditorData() {
     } else {
         console.log('[Editor] Ready');
         toast('Ready', 'success');
+    }
+    // Open changelog tab once on first load (not on re-configure).
+    if (!loadEditorData._changelogOpened) {
+        loadEditorData._changelogOpened = true;
+        window.openChangelogTab?.();
     }
 }
 

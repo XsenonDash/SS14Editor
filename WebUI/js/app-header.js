@@ -66,6 +66,18 @@
     }
 
     // -----------------------------------------------------------------
+    // Help → Changelogs
+    // -----------------------------------------------------------------
+    const changelogsBtn = document.getElementById('hdr-changelogs');
+    if (changelogsBtn) {
+        changelogsBtn.addEventListener('click', () => {
+            if (typeof window.openChangelogTab === 'function') {
+                window.openChangelogTab();
+            }
+        });
+    }
+
+    // -----------------------------------------------------------------
     // Window controls (frameless BrowserWindow)
     // -----------------------------------------------------------------
     const winControls = document.getElementById('hdr-window-controls');

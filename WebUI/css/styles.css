@@ -2462,3 +2462,72 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 }
 
 /* ======================== (sidebar collapse removed) ================== */
+
+/* ====================================================================
+   In-app Markdown view (Help → Changelogs tab). Scoped to .markdown-view
+   so it cannot affect proto cards or any other editor surface.
+   ==================================================================== */
+.markdown-view {
+    padding: 24px 32px 48px;
+    max-width: 900px;
+    margin: 0 auto;
+    color: var(--text-primary);
+    line-height: 1.55;
+    font-size: 14px;
+    overflow-y: auto;
+}
+.markdown-view h1,
+.markdown-view h2,
+.markdown-view h3,
+.markdown-view h4,
+.markdown-view h5,
+.markdown-view h6 {
+    margin: 1.4em 0 0.5em;
+    font-weight: 600;
+    line-height: 1.25;
+}
+.markdown-view h1 { font-size: 1.9em; border-bottom: 1px solid var(--border-color, #2c2c2c); padding-bottom: 0.25em; }
+.markdown-view h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-color, #2c2c2c); padding-bottom: 0.2em; }
+.markdown-view h3 { font-size: 1.25em; }
+.markdown-view h4 { font-size: 1.1em; }
+.markdown-view p { margin: 0.7em 0; }
+.markdown-view a { color: var(--accent, #5aaaff); text-decoration: none; }
+.markdown-view a:hover { text-decoration: underline; }
+.markdown-view ul,
+.markdown-view ol { margin: 0.5em 0 0.7em; padding-left: 1.8em; }
+.markdown-view li { margin: 0.2em 0; }
+.markdown-view code {
+    background: var(--bg-surface, #1e1e1e);
+    border: 1px solid var(--border-color, #2c2c2c);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono, Consolas, 'Cascadia Mono', monospace);
+    font-size: 0.92em;
+}
+.markdown-view pre {
+    background: var(--bg-surface, #1e1e1e);
+    border: 1px solid var(--border-color, #2c2c2c);
+    border-radius: 4px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    margin: 0.8em 0;
+}
+.markdown-view pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+    font-size: 0.92em;
+}
+.markdown-view blockquote {
+    border-left: 3px solid var(--border-color, #2c2c2c);
+    padding: 0.2em 0 0.2em 12px;
+    margin: 0.8em 0;
+    color: var(--text-secondary, #b0b0b0);
+}
+.markdown-view hr {
+    border: 0;
+    border-top: 1px solid var(--border-color, #2c2c2c);
+    margin: 1.5em 0;
+}
+.markdown-view strong { font-weight: 600; color: var(--text-primary); }
+.markdown-view em { font-style: italic; }

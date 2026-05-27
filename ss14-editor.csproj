@@ -32,6 +32,11 @@
     <EmbeddedResource Include="WebUI\**\*">
       <Link>WebUI\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </EmbeddedResource>
+    <!-- Bundle the user-maintained changelog so /api/changelog can serve it
+         from any build (packaged AppImage / NSIS / dev). -->
+    <EmbeddedResource Include="CHANGELOG.md">
+      <LogicalName>Content.Editor.CHANGELOG.md</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <!-- WebUI files are resources, not source -->

@@ -266,4 +266,43 @@ internal sealed partial class ApiRouter
             Logger.Warn($"Failed to write recent projects: {ex.Message}");
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Changelog: served from the embedded CHANGELOG.md (see csproj). In dev
+    // builds the file is also read from the repo root if the embedded copy
+    // is stale relative to the working tree.
+    // -----------------------------------------------------------------------
+    private async Task HandleChangelogAsync(HttpListenerRequest req, HttpListenerResponse res)
+    {
+        string? text = TryReadDevChangelog() ?? ReadEmbeddedChangelog();
+        if (text == null)
+        {
+            await HttpJson.WriteErrorAsync(res, 404, "CHANGELOG.md not found");
+            return;
+        }
+        await HttpJson.WriteAsync(res, new { content = text });
+    }
+
+    private static string? TryReadDevChangelog()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "CHANGELOG.md");
+            if (File.Exists(candidate))
+            {
+                try { return File.ReadAllText(candidate); } catch { return null; }
+            }
+        }
+        return null;
+    }
+
+    private static string? ReadEmbeddedChangelog()
+    {
+        using var stream = Assembly.GetExecutingAssembly()
+            .GetManifestResourceStream("Content.Editor.CHANGELOG.md");
+        if (stream == null) return null;
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
 }
