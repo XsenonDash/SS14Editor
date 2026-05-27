@@ -72,12 +72,17 @@ function gitClassForDir(path) {
 function filterTreeNodes(nodes, q) {
     if (!q) return nodes;
 
-    // Also search prototype IDs from the index
+    // Pre-compute matching files from proto index.
+    // A file is included if any of its proto entries matches by ID, or if the
+    // filename itself matches. Using a Set and skipping already-added files
+    // avoids redundant smartMatch calls for large indexes.
     const matchingFiles = new Set();
     if (state.protoIndex) {
         for (const entries of Object.values(state.protoIndex)) {
             for (const entry of entries) {
-                if (entry.id && smartMatch(entry.id, q)) {
+                if (matchingFiles.has(entry.file)) continue;
+                const fname = entry.file.split('/').pop();
+                if ((entry.id && smartMatch(entry.id, q)) || smartMatch(fname, q)) {
                     matchingFiles.add(entry.file);
                 }
             }
@@ -93,8 +98,10 @@ function filterTreeNodes(nodes, q) {
             const ch = filterTreeNodes(n.children || [], q);
             return ch.length ? { ...n, children: ch } : null;
         }
-        // Match by file name OR by prototype ID in this file
-        return (smartMatch(n.name, q) || matchingFiles.has(n.path)) ? n : null;
+        // Match by file name, full relative path (allows "entities/priest"),
+        // or by prototype ID in this file. The short-circuit order ensures
+        // that the cheap n.name check runs first on every node.
+        return (smartMatch(n.name, q) || matchingFiles.has(n.path) || smartMatch(n.path, q)) ? n : null;
     }).filter(Boolean);
 }
 

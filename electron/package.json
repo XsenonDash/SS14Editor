@@ -47,7 +47,14 @@
       "target": [
         { "target": "AppImage", "arch": ["x64"] }
       ],
-      "artifactName": "ss14-editor-v${version}-linux-x64.${ext}"
+      "artifactName": "ss14-editor-v${version}-linux-x64.${ext}",
+      "executableArgs": [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu-sandbox",
+        "--no-zygote"
+      ]
     },
     "mac": {
       "target": [
