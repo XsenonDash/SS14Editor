@@ -319,7 +319,25 @@ function mapCtrl(val, meta, dis, onChange) {
         const isBlock = _isBlockValue(meta.value);
         for (const [k, v] of Object.entries(obj)) {
             const row = _div(isBlock ? 'map-entry map-entry--block' : 'map-entry');
-            const keyLabel = _div('map-key-label'); keyLabel.textContent = k;
+            const keyLabel = _div('map-key-label');
+            if (dis) {
+                keyLabel.textContent = k;
+            } else {
+                keyLabel.classList.add('map-key-label--ctrl');
+                keyLabel.appendChild(elementControl(
+                    meta.key || { kind: 'text' },
+                    k,
+                    false,
+                    nk => {
+                        nk = String(nk ?? '').trim();
+                        if (!nk || nk === k) return;
+                        if (Object.prototype.hasOwnProperty.call(obj, nk)) return;
+                        const rebuilt = {};
+                        for (const ek of Object.keys(obj)) rebuilt[ek === k ? nk : ek] = obj[ek];
+                        onChange({ ...rebuilt }); rebuild();
+                    }
+                ));
+            }
             const content = _div('map-entry-content');
             content.appendChild(elementControl(meta.value, v, dis, nv => {
                 obj[k] = nv; onChange({ ...obj });

@@ -2,6 +2,7 @@
 
 ## v1.1.12
 - Hovering over a component now displays the XML summary from the code.
+- Dictionary entries can now be edited after they have been created.
 
 ## v1.1.11
 - Optimization has been implemented to reduce app freezes when editing prototypes.
