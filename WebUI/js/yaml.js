@@ -283,6 +283,149 @@ function _expectedTag(jsVal) {
 }
 
 /**
+ * Stable, fast-ish deep comparison key used purely for "is this AST item
+ * the same value as that new JS item?" matching during Seq patching. Two
+ * values that produce the same string are considered equivalent for the
+ * purpose of preserving comments across reorders / removals.
+ */
+function _seqMatchKey(jsVal) {
+    if (jsVal === null || jsVal === undefined) return 'n';
+    const t = typeof jsVal;
+    if (t === 'string') return 's:' + jsVal;
+    if (t === 'number') return 'f:' + jsVal;
+    if (t === 'boolean') return 'b:' + (jsVal ? 1 : 0);
+    if (Array.isArray(jsVal)) return 'a:[' + jsVal.map(_seqMatchKey).join(',') + ']';
+    if (t === 'object') {
+        const keys = Object.keys(jsVal).filter(k => !k.startsWith('__')).sort();
+        const tag = jsVal.__yamlTag ? '!' + jsVal.__yamlTag : '';
+        return 'o' + tag + ':{' + keys.map(k => k + '=' + _seqMatchKey(jsVal[k])).join(',') + '}';
+    }
+    return '?';
+}
+
+function _astNodeMatchKey(node) {
+    if (node === null || node === undefined) return 'n';
+    if (YAML.isScalar(node)) {
+        const v = node.value;
+        if (v === null || v === undefined) return 'n';
+        if (typeof v === 'string') return 's:' + v;
+        if (typeof v === 'number') return 'f:' + v;
+        if (typeof v === 'boolean') return 'b:' + (v ? 1 : 0);
+        return '?';
+    }
+    if (YAML.isSeq(node)) return 'a:[' + node.items.map(_astNodeMatchKey).join(',') + ']';
+    if (YAML.isMap(node)) {
+        const pairs = node.items.map(p => {
+            const k = YAML.isScalar(p.key) ? p.key.value : '?';
+            return [String(k), _astNodeMatchKey(p.value)];
+        });
+        pairs.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+        const tag = node.tag ? node.tag.replace(/^!type:/, '!') : '';
+        return 'o' + tag + ':{' + pairs.map(p => p[0] + '=' + p[1]).join(',') + '}';
+    }
+    return '?';
+}
+
+/**
+ * Patch a YAML Seq AST node in-place to match a new JS array, preserving
+ * per-item comments (commentBefore / comment on each item) across reorder,
+ * removal, and insertion. The naive zip-by-position approach loses comment
+ * identity whenever items shift — a reorder rewires comments onto the wrong
+ * values. Strategy:
+ *
+ *   1. Same length AND no positional value changes → no-op.
+ *   2. Same length AND exactly one positional value differs → positional
+ *      edit at that index (preserves all comments, including the edited
+ *      item's own commentBefore).
+ *   3. Otherwise, attempt match-by-value: assign each new JS item to a
+ *      unique unused old AST node with the same _seqMatchKey. If a clean
+ *      mapping exists (allowing for fresh additions/removals), use it;
+ *      this preserves comments through reorders and partial edits.
+ *   4. Fall back to the previous zip-by-position behaviour for messy
+ *      cases (multiple simultaneous edits without permutation).
+ */
+function _patchSeq(astNode, jsValue, doc) {
+    const oldItems = [...astNode.items];
+    const oldKeys = oldItems.map(_astNodeMatchKey);
+    const newKeys = jsValue.map(_seqMatchKey);
+
+    // (1) / (2): same-length fast paths.
+    if (oldItems.length === jsValue.length) {
+        let diffs = 0; let diffIdx = -1;
+        for (let i = 0; i < oldItems.length; i++) {
+            if (oldKeys[i] !== newKeys[i]) { diffs++; diffIdx = i; if (diffs > 1) break; }
+        }
+        if (diffs === 0) return;
+        if (diffs === 1) {
+            _patchSeqItemAt(astNode, diffIdx, jsValue[diffIdx], doc);
+            return;
+        }
+    }
+
+    // (3): match-by-value. Greedy: for each new item, take the first unused
+    // old item with the same key.
+    const used = new Set();
+    const mapping = new Array(jsValue.length);
+    let reused = 0;
+    for (let i = 0; i < jsValue.length; i++) {
+        const want = newKeys[i];
+        const found = oldKeys.findIndex((k, j) => !used.has(j) && k === want);
+        if (found >= 0) { used.add(found); mapping[i] = found; reused++; }
+        else { mapping[i] = -1; }
+    }
+    // Use match-by-value when at least one item was reused, so comments
+    // ride along with their values across reorders, removals, and partial
+    // edits. (Pure same-length single-edit is already handled above; pure
+    // identical is the no-op fast path.)
+    if (reused > 0) {
+        const newItems = new Array(jsValue.length);
+        for (let i = 0; i < jsValue.length; i++) {
+            if (mapping[i] >= 0) {
+                const reusedNode = oldItems[mapping[i]];
+                // If the JS value differs (shouldn't, since keys matched) patch
+                // it; otherwise leave the node alone so comments stay intact.
+                const want = newKeys[i];
+                if (_astNodeMatchKey(reusedNode) !== want) {
+                    _patchSeqItemAt({ items: newItems }, i, jsValue[i], doc, reusedNode);
+                } else {
+                    newItems[i] = reusedNode;
+                }
+            } else {
+                newItems[i] = _jsToNode(jsValue[i], doc);
+            }
+        }
+        astNode.items.length = 0;
+        astNode.items.push(...newItems);
+        return;
+    }
+
+    // (4): fallback — original zip-by-position behaviour.
+    const minLen = Math.min(astNode.items.length, jsValue.length);
+    for (let i = 0; i < minLen; i++) _patchSeqItemAt(astNode, i, jsValue[i], doc);
+    for (let i = minLen; i < jsValue.length; i++) astNode.add(_jsToNode(jsValue[i], doc));
+    astNode.items.splice(jsValue.length);
+}
+
+// Patch (or replace) the item at index `i` of `astNode.items` to represent
+// `jsItem`. When the existing node is structurally compatible, patch it
+// in-place so its commentBefore / comment annotations survive. Pass
+// `forceNode` to slot an explicit AST node (used by the match-by-value
+// path to recycle a node from a different index).
+function _patchSeqItemAt(astNode, i, jsItem, doc, forceNode) {
+    const item = forceNode !== undefined ? forceNode : astNode.items[i];
+    const jsIsObj = jsItem !== null && typeof jsItem === 'object' && !Array.isArray(jsItem);
+    const jsIsArr = Array.isArray(jsItem);
+    if (item !== undefined) {
+        if (YAML.isScalar(item) && !jsIsObj && !jsIsArr) { item.value = jsItem; astNode.items[i] = item; return; }
+        if (YAML.isMap(item) && jsIsObj && item.tag === _expectedTag(jsItem)) {
+            _patchAstNode(item, jsItem, doc); astNode.items[i] = item; return;
+        }
+        if (YAML.isSeq(item) && jsIsArr) { _patchAstNode(item, jsItem, doc); astNode.items[i] = item; return; }
+    }
+    astNode.items[i] = _jsToNode(jsItem, doc);
+}
+
+/**
  * Recursively patch an existing YAML AST node in-place to match a new JS
  * value, preserving all commentBefore / comment annotations on child nodes.
  *
@@ -328,21 +471,7 @@ function _patchAstNode(astNode, jsValue, doc) {
     }
 
     if (YAML.isSeq(astNode) && Array.isArray(jsValue)) {
-        const minLen = Math.min(astNode.items.length, jsValue.length);
-        for (let i = 0; i < minLen; i++) {
-            const item   = astNode.items[i];
-            const jsItem = jsValue[i];
-            const jsIsObj = jsItem !== null && typeof jsItem === 'object' && !Array.isArray(jsItem);
-            const jsIsArr = Array.isArray(jsItem);
-            if (YAML.isScalar(item) && !jsIsObj && !jsIsArr) { item.value = jsItem; continue; }
-            if (YAML.isMap(item) && jsIsObj && item.tag === _expectedTag(jsItem)) {
-                _patchAstNode(item, jsItem, doc); continue;
-            }
-            if (YAML.isSeq(item) && jsIsArr) { _patchAstNode(item, jsItem, doc); continue; }
-            astNode.items[i] = _jsToNode(jsItem, doc);
-        }
-        for (let i = minLen; i < jsValue.length; i++) astNode.add(_jsToNode(jsValue[i], doc));
-        astNode.items.splice(jsValue.length);
+        _patchSeq(astNode, jsValue, doc);
         return;
     }
     // Alias / unhandled node type: no-op.
@@ -466,13 +595,23 @@ function dumpYamlMergeDisk(editorYaml, editorDoc, diskContent, diskDoc, dirtySin
  * always preserved as the file preamble.
  *
  * Falls back to dumpYaml() when range data is missing.
+ *
+ * `protoAstRefs` is a WeakMap mapping each pre-existing JS proto object in
+ * `newYaml` to its corresponding AST item node in `oldDoc.contents.items`.
+ * Newly-inserted protos (e.g. via addNewPrototype) are absent from the map
+ * and serialized fresh. AST-identity matching is the SINGLE source of truth
+ * here — id-based matching was deeply ambiguous (two protos can legally
+ * share an id like the default 'NewPrototype' before the user renames them,
+ * causing the same body to be emitted twice and producing a duplicate proto
+ * in the saved file). Callers must keep `fs.protoAstRefs` in sync with
+ * `fs.yaml` ↔ `fs.doc.contents.items` after every parse / commit.
  */
-function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc) {
+function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc, protoAstRefs) {
     if (!oldDoc || !YAML.isSeq(oldDoc.contents)) return dumpYaml(newYaml);
     const items = oldDoc.contents.items;
     if (!items.length) return dumpYaml(newYaml);
 
-    // Extract (prefix, body, id, origIdx) for each old proto.
+    // Extract (prefix, body, astItem, origIdx) for each old proto.
     const slices = [];
     let pos = 0;
     for (let j = 0; j < items.length; j++) {
@@ -484,7 +623,7 @@ function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc) {
         slices.push({
             prefix  : oldText.slice(pos, itemStart),
             body    : oldText.slice(itemStart, nodeEnd),
-            id      : _nodeToJs(item)?.id,
+            astItem : item,
             origIdx : j,
         });
         pos = nodeEnd;
@@ -493,14 +632,19 @@ function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc) {
     // Content before any proto (file-level header comments, etc.)
     const fileHeader = slices[0].prefix;
 
-    // id -> slice (only well-formed protos with an id field)
-    const byId = new Map(slices.filter(s => s.id != null).map(s => [s.id, s]));
+    // AST-item -> slice. Consumed entries are removed so even a same-id
+    // duplicate inserted by the user can't accidentally reuse another
+    // slice's body — only the slice whose AST node the JS proto was
+    // originally linked to (via protoAstRefs) can match.
+    const byAst = new Map(slices.map(s => [s.astItem, s]));
 
     const parts = [fileHeader];
     for (let i = 0; i < newYaml.length; i++) {
-        const id  = newYaml[i]?.id;
-        const old = id != null ? byId.get(id) : undefined;
+        const proto = newYaml[i];
+        const ast = protoAstRefs ? protoAstRefs.get(proto) : null;
+        const old = ast ? byAst.get(ast) : undefined;
         if (old) {
+            byAst.delete(ast);
             if (i > 0) {
                 // Use the proto's original prefix as separator, UNLESS it
                 // was originally the first proto (prefix == fileHeader,
@@ -509,11 +653,234 @@ function dumpYamlRespectfulStructural(newYaml, oldText, oldDoc) {
             }
             parts.push(old.body);
         } else {
-            // New proto - serialize fresh with a standard blank-line gap.
+            // New proto (or AST-link missing): serialize fresh with a standard
+            // blank-line gap.
             if (i > 0) parts.push('\n');
-            parts.push(_dumpSingleProto(newYaml[i]).trimEnd() + '\n');
+            parts.push(_dumpSingleProto(proto).trimEnd() + '\n');
         }
     }
     parts.push(trailer || '\n');
     return parts.join('');
+}
+
+/**
+ * Rebuild `fs.protoAstRefs` from the current `fs.yaml` ↔ `fs.doc` pairing.
+ * Must be called after every parse / commit so the mapping reflects the
+ * fresh AST nodes that just came out of parseYamlDoc. Pre-existing JS
+ * proto objects retain identity across in-place field edits, so the map
+ * survives until the user does a structural mutation (which is exactly
+ * when dumpYamlRespectfulStructural needs it).
+ */
+function relinkProtoAst(fs) {
+    fs.protoAstRefs = new WeakMap();
+    const items = fs.doc?.contents?.items;
+    if (!Array.isArray(items) || !Array.isArray(fs.yaml)) return;
+    const n = Math.min(items.length, fs.yaml.length);
+    for (let i = 0; i < n; i++) {
+        const proto = fs.yaml[i];
+        if (proto && typeof proto === 'object') fs.protoAstRefs.set(proto, items[i]);
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Comment read / write helpers (eemeli/yaml commentBefore on AST nodes)
+// ──────────────────────────────────────────────────────────────────────
+
+/** Returns the commentBefore text for the proto at idx, or null. */
+function getProtoCommentBefore(doc, idx) {
+    return doc?.contents?.items?.[idx]?.commentBefore ?? null;
+}
+
+// yaml-lib stringify emits `commentBefore` / `comment` verbatim after `#`,
+// so a missing leading space produces `#text` instead of `# text`. Every
+// comment-writer goes through this helper so on-disk output is consistent.
+function _normCmt(t) {
+    if (t === null || t === undefined || t === '') return undefined;
+    return (t.startsWith(' ') || t.startsWith('\t') || t.startsWith('\n')) ? t : ' ' + t;
+}
+
+/**
+ * Patch the comment before proto idx directly in the raw content string.
+ * Returns { newContent, newDoc } or null when range info is absent.
+ *
+ * dumpYamlRespectful text-slices inter-proto gaps from the original content,
+ * so proto-level comments must be edited in the raw text rather than the AST.
+ */
+function patchProtoCommentInContent(content, doc, idx, newText) {
+    const items = doc?.contents?.items;
+    if (!items || !items[idx]?.range) return null;
+    const [nodeStart] = items[idx].range;
+    const itemStart = _seqEntryStart(content, nodeStart);
+    const prevEnd = idx > 0 ? (items[idx - 1].range?.[2] ?? 0) : 0;
+    const gapText = content.slice(prevEnd, itemStart);
+    const blankLines = gapText.match(/^(\n*)/)?.[1] ?? '\n\n';
+    const newComment = newText
+        ? newText.split('\n').map(l => '# ' + l).join('\n') + '\n'
+        : '';
+    const newContent = content.slice(0, prevEnd) + blankLines + newComment + content.slice(itemStart);
+    const { doc: newDoc } = parseYamlDoc(newContent);
+    return { newContent, newDoc };
+}
+
+/** Returns the commentBefore text for field key inside proto protoIdx, or null. */
+function getFieldCommentBefore(doc, protoIdx, key) {
+    const item = doc?.contents?.items?.[protoIdx];
+    if (!YAML.isMap(item)) return null;
+    const pair = item.items.find(p => YAML.isScalar(p.key) && p.key.value === key);
+    return pair?.key?.commentBefore ?? null;
+}
+
+/**
+ * Set or clear commentBefore for a field key inside proto protoIdx in the AST.
+ * The proto must be marked dirty so _dumpSingleProtoFromNode re-serializes it
+ * (which preserves inner-pair comments while stripping the top-level commentBefore).
+ */
+function setFieldCommentBefore(doc, protoIdx, key, newText) {
+    const item = doc?.contents?.items?.[protoIdx];
+    if (!YAML.isMap(item)) return false;
+    const pair = item.items.find(p => YAML.isScalar(p.key) && p.key.value === key);
+    if (!pair?.key) return false;
+    pair.key.commentBefore = _normCmt(newText);
+    return true;
+}
+
+/**
+ * Returns the inline/trailing comment for a field value, or null.
+ * Handles three common shapes:
+ *   key: value                 # comment   → pair.value.comment
+ *   key:                                  → pair.key.comment
+ *     - thing # comment        → pair.value.items[0].comment (single-item Seq)
+ */
+function getFieldInlineComment(doc, protoIdx, key) {
+    const item = doc?.contents?.items?.[protoIdx];
+    if (!YAML.isMap(item)) return null;
+    const pair = item.items.find(p => YAML.isScalar(p.key) && p.key.value === key);
+    if (!pair) return null;
+    return _pairInlineComment(pair);
+}
+function _pairInlineComment(pair) {
+    if (YAML.isScalar(pair.value)) return pair.value.comment ?? null;
+    if (YAML.isSeq(pair.value) && pair.value.items?.length === 1 && YAML.isScalar(pair.value.items[0])) {
+        return pair.value.items[0].comment ?? pair.key?.comment ?? pair.value.commentBefore?.trim() ?? null;
+    }
+    // Non-scalar value (multi-item Seq, Map). yaml lib doesn't reliably
+    // round-trip `pair.key.comment` for block-style sequences, so we also
+    // accept `pair.value.commentBefore` (renders as a "# cmt" line after
+    // the key and before the value's first item — visually adjacent).
+    return pair.value?.commentBefore?.trim() ?? pair.key?.comment ?? null;
+}
+
+/**
+ * Set or clear the inline/trailing comment for a field value.
+ * Returns false if the key is not present in the proto map.
+ */
+function setFieldInlineComment(doc, protoIdx, key, newText) {
+    const item = doc?.contents?.items?.[protoIdx];
+    if (!YAML.isMap(item)) return false;
+    const pair = item.items.find(p => YAML.isScalar(p.key) && p.key.value === key);
+    if (!pair) return false;
+    return _setPairInlineComment(pair, newText);
+}
+function _setPairInlineComment(pair, newText) {
+    const norm = _normCmt(newText);
+    if (YAML.isScalar(pair.value)) {
+        pair.value.comment = norm;
+    } else if (YAML.isSeq(pair.value) && pair.value.items?.length === 1 && YAML.isScalar(pair.value.items[0])) {
+        pair.value.items[0].comment = norm;
+    } else if (pair.value) {
+        // Multi-item Seq or Map: use `value.commentBefore` (round-trips
+        // reliably). Clear any stale `pair.key.comment` to avoid the
+        // comment getting duplicated on re-serialize.
+        pair.value.commentBefore = norm;
+        if (pair.key) pair.key.comment = undefined;
+    } else if (pair.key) {
+        pair.key.comment = norm;
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Component-field comments (one extra level of nesting):
+//  proto.components is a Seq of Maps, each has a `type` and field pairs.
+// ──────────────────────────────────────────────────────────────────────
+function _resolveComponentMap(doc, protoIdx, compIdx) {
+    const proto = doc?.contents?.items?.[protoIdx];
+    if (!YAML.isMap(proto)) return null;
+    const compsPair = proto.items.find(p => YAML.isScalar(p.key) && p.key.value === 'components');
+    if (!compsPair || !YAML.isSeq(compsPair.value)) return null;
+    const comp = compsPair.value.items?.[compIdx];
+    return YAML.isMap(comp) ? comp : null;
+}
+function _findPair(map, key) {
+    return map?.items?.find(p => YAML.isScalar(p.key) && p.key.value === key) ?? null;
+}
+function getComponentFieldInlineComment(doc, protoIdx, compIdx, key) {
+    const m = _resolveComponentMap(doc, protoIdx, compIdx);
+    if (!m) return null;
+    const pair = _findPair(m, key);
+    return pair ? _pairInlineComment(pair) : null;
+}
+function setComponentFieldInlineComment(doc, protoIdx, compIdx, key, newText) {
+    const m = _resolveComponentMap(doc, protoIdx, compIdx);
+    if (!m) return false;
+    const pair = _findPair(m, key);
+    return pair ? _setPairInlineComment(pair, newText) : false;
+}
+function getComponentFieldCommentBefore(doc, protoIdx, compIdx, key) {
+    const m = _resolveComponentMap(doc, protoIdx, compIdx);
+    if (!m) return null;
+    const pair = _findPair(m, key);
+    return pair?.key?.commentBefore ?? null;
+}
+function setComponentFieldCommentBefore(doc, protoIdx, compIdx, key, newText) {
+    const m = _resolveComponentMap(doc, protoIdx, compIdx);
+    if (!m) return false;
+    const pair = _findPair(m, key);
+    if (!pair?.key) return false;
+    pair.key.commentBefore = _normCmt(newText);
+    return true;
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Trailing file-level comment (after the last proto).
+//  Patched on raw content for the same reason as patchProtoCommentInContent:
+//  dumpYamlRespectful text-slices that region from the original file.
+// ──────────────────────────────────────────────────────────────────────
+function getTrailingComment(content, doc) {
+    const items = doc?.contents?.items ?? [];
+    if (!items.length) return null;
+    const lastEnd = items[items.length - 1].range?.[2] ?? items[items.length - 1].range?.[1] ?? 0;
+    const tail = content.slice(lastEnd);
+    const lines = tail.split('\n').map(l => l.trim()).filter(l => l.startsWith('#'));
+    if (!lines.length) return null;
+    return lines.map(l => l.replace(/^#\s?/, '')).join('\n');
+}
+function patchTrailingCommentInContent(content, doc, newText) {
+    const items = doc?.contents?.items ?? [];
+    if (!items.length) return null;
+    const lastEnd = items[items.length - 1].range?.[2] ?? items[items.length - 1].range?.[1] ?? 0;
+    const before = content.slice(0, lastEnd);
+    const tail = content.slice(lastEnd);
+    // Strip existing trailing comment block: keep leading whitespace, drop
+    // any consecutive comment-only lines, then preserve everything after.
+    const lines = tail.split('\n');
+    let i = 0;
+    // First skip blank lines into a separator we keep.
+    while (i < lines.length && lines[i].trim() === '') i++;
+    let firstCmt = i;
+    while (i < lines.length && lines[i].trim().startsWith('#')) i++;
+    // Keep blank lines before the existing comment block (if any).
+    const head = lines.slice(0, firstCmt).join('\n');
+    const rest = lines.slice(i).join('\n');
+    let injected = '';
+    if (newText) {
+        const sep = head ? '' : '\n';
+        injected = sep + newText.split('\n').map(l => '# ' + l).join('\n');
+    }
+    const newTail = head + injected + (rest ? (newText && !head ? '\n' : '\n') + rest : (newText ? '\n' : ''));
+    const newContent = before + newTail;
+    const { doc: newDoc } = parseYamlDoc(newContent);
+    return { newContent, newDoc };
 }

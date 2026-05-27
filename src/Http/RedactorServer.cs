@@ -166,12 +166,12 @@ public static class EditorServer
     {
         if (urlPath == "/") urlPath = "/index.html";
 
-        // 1. Try dev-mode: look for files in the WebUI/ folder one level above the binary.
-        //    Binary is at bin/; WebUI/ is at the repo root.
+        // 1. Try dev-mode: walk UP from the binary location looking for a
+        //    sibling WebUI/ folder. Works whether the binary is at bin/,
+        //    bin/Debug/net10.0/, bin/Release/net10.0/win-x64/, etc.
         //    This lets developers edit JS/CSS without recompiling.
-        var devPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "WebUI",
-            urlPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
-        if (File.Exists(devPath))
+        var devPath = ResolveDevWebFile(urlPath);
+        if (devPath != null && File.Exists(devPath))
         {
             res.ContentType = StaticMime.For(urlPath);
             var devBytes = await File.ReadAllBytesAsync(devPath);
@@ -196,6 +196,28 @@ public static class EditorServer
             // ContentLength64 is unknown for embedded streams — let the OS close the connection.
             await stream.CopyToAsync(res.OutputStream);
         }
+    }
+
+    private static string? _devWebRoot;
+    private static bool _devWebRootProbed;
+    private static string? ResolveDevWebFile(string urlPath)
+    {
+        if (!_devWebRootProbed)
+        {
+            _devWebRootProbed = true;
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+            {
+                var candidate = Path.Combine(dir.FullName, "WebUI");
+                if (Directory.Exists(candidate) && File.Exists(Path.Combine(candidate, "index.html")))
+                {
+                    _devWebRoot = candidate;
+                    break;
+                }
+            }
+        }
+        if (_devWebRoot == null) return null;
+        return Path.Combine(_devWebRoot, urlPath.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
     }
 
     /// <summary>

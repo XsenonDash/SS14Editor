@@ -137,6 +137,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
     const isOverride = !isInh && !ctx && Array.isArray(inherited?.components)
         && inherited.components.some(c => c && c.type === compType);
     const card = _div('component-card' + (startCollapsed ? ' collapsed' : '') + (isInh ? ' inherited' : ' comp-local'));
+    card.dataset.compType = compType;
     const cMeta = state.metadata?.components?.[compType];
     const hdr = _div('component-header');
     hdr.innerHTML = `<span class="component-type" title="${esc(cMeta?.summary || '')}">${esc(compType)}</span>`;
@@ -190,6 +191,11 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
     });
     card.appendChild(hdr);
 
+    // Inline comment for the `- type: X  # cmt` line (and chat-bubble when none).
+    if (!isInh && compIdx >= 0 && filePath) {
+        attachInlineComment(hdr, commentTargetForCompField(filePath, protoIdx, compIdx, 'type'));
+    }
+
     const body = _div('component-body');
     const renderedTags = new Set(['type']);
 
@@ -237,7 +243,17 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
             }
 
             const onReset = (!isInh && source === 'local') ? () => compOnReset(f.tag) : null;
-            body.appendChild(fieldRow(f.tag, f, value, source, nv => compOnChange(f.tag, nv), onReset));
+            const cBefore = isInh ? null : buildComponentFieldCommentBefore(filePath, protoIdx, compIdx, f.tag);
+            if (cBefore) body.appendChild(cBefore);
+            const cRow = fieldRow(f.tag, f, value, source, nv => compOnChange(f.tag, nv), onReset);
+            body.appendChild(cRow);
+            if (!isInh) {
+                attachComponentFieldComment(cRow, filePath, protoIdx, compIdx, f.tag);
+                attachSeqItemCommentsForComponentField(cRow, filePath, protoIdx, compIdx, f.tag);
+                attachMapEntryCommentsForComponentField(cRow, filePath, protoIdx, compIdx, f.tag);
+                attachTupleElementCommentsForComponentField(cRow, filePath, protoIdx, compIdx, f.tag);
+                attachDataDefFieldCommentsForComponentField(cRow, filePath, protoIdx, compIdx, f.tag);
+            }
         }
     }
 
@@ -246,7 +262,17 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
         if (k === 'type' || k.startsWith('__') || renderedTags.has(k)) continue;
         const source = isInh ? 'inherited' : 'local';
         const onReset = (!isInh) ? () => compOnReset(k) : null;
-        body.appendChild(genericRow(k, v, source, nv => compOnChange(k, nv), onReset));
+        const cBefore = isInh ? null : buildComponentFieldCommentBefore(filePath, protoIdx, compIdx, k);
+        if (cBefore) body.appendChild(cBefore);
+        const eRow = genericRow(k, v, source, nv => compOnChange(k, nv), onReset);
+        body.appendChild(eRow);
+        if (!isInh) {
+            attachComponentFieldComment(eRow, filePath, protoIdx, compIdx, k);
+            attachSeqItemCommentsForComponentField(eRow, filePath, protoIdx, compIdx, k);
+            attachMapEntryCommentsForComponentField(eRow, filePath, protoIdx, compIdx, k);
+            attachTupleElementCommentsForComponentField(eRow, filePath, protoIdx, compIdx, k);
+            attachDataDefFieldCommentsForComponentField(eRow, filePath, protoIdx, compIdx, k);
+        }
     }
 
     card.appendChild(body);

@@ -335,6 +335,7 @@ async function openFile(path, targetGroupId) {
         placeholder.yaml       = protos;
         placeholder.doc        = doc;
         placeholder.dirtyProtos = new Set();
+        relinkProtoAst(placeholder);
         placeholder.readOnly   = !!resp.readOnly || path.startsWith('__engine__/');
         placeholder.loading    = false;
         renderTabs();

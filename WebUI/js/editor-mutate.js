@@ -50,15 +50,18 @@ function commitChange(fs) {
         fs.yaml.length === fs.doc.contents?.items?.length) {
         nc = dumpYamlRespectful(fs.yaml, fs.doc, fs.content, fs.dirtyProtos);
     } else if (fs.structuralChange && fs.doc && YAML.isSeq(fs.doc.contents)) {
-        nc = dumpYamlRespectfulStructural(fs.yaml, fs.content, fs.doc);
+        nc = dumpYamlRespectfulStructural(fs.yaml, fs.content, fs.doc, fs.protoAstRefs);
     } else {
         nc = dumpYaml(fs.yaml);
     }
     const { doc } = parseYamlDoc(nc);
     fs.doc = doc;
     fs.dirtyProtos = new Set();
+    fs.structuralChange = false;
+    fs.pushHistory(nc);
+    relinkProtoAst(fs);
     state.resolvedCache.clear();
-    fs.pushHistory(nc); renderTabs(); scheduleAutosave(fs);
+    renderTabs(); scheduleAutosave(fs);
 }
 
 // ======================== AUTOSAVE =====================================
@@ -97,6 +100,7 @@ function scheduleAutosave(fs) {
                 fs.history[fs.historyIdx] = payload;
                 const { doc } = parseYamlDoc(payload);
                 fs.doc = doc;
+                relinkProtoAst(fs);
             }
             fs.dirtySinceSave.clear();
             fs.structuralChange = false;
@@ -123,6 +127,7 @@ function handleUndo() {
     fs.dirtyProtos = new Set();
     fs.dirtySinceSave = new Set();
     fs.structuralChange = false;
+    relinkProtoAst(fs);
     state.resolvedCache.clear();
     renderEditor(); renderTabs(); scheduleAutosave(fs);
 }
@@ -136,6 +141,7 @@ function handleRedo() {
     fs.dirtyProtos = new Set();
     fs.dirtySinceSave = new Set();
     fs.structuralChange = false;
+    relinkProtoAst(fs);
     state.resolvedCache.clear();
     renderEditor(); renderTabs(); scheduleAutosave(fs);
 }

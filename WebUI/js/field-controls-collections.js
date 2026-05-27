@@ -279,18 +279,20 @@ function tupleCtrl(val, meta, dis, onChange) {
     if (elems.length === 0) {
         // No metadata: show a raw-text stub so the user can see something.
         arr.forEach((item, i) => {
-            const c = elementControl({ kind: 'text' }, item, dis, nv => {
+            const slot = _div('tuple-element');
+            slot.appendChild(elementControl({ kind: 'text' }, item, dis, nv => {
                 arr[i] = nv; emit();
-            });
-            w.appendChild(c);
+            }));
+            w.appendChild(slot);
         });
     } else {
         elems.forEach((elemMeta, i) => {
-            const c = elementControl(elemMeta, arr[i] ?? null, dis, nv => {
+            const slot = _div('tuple-element');
+            slot.appendChild(elementControl(elemMeta, arr[i] ?? null, dis, nv => {
                 arr[i] = nv;
                 emit();
-            });
-            w.appendChild(c);
+            }));
+            w.appendChild(slot);
         });
     }
     return w;

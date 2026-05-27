@@ -7,7 +7,7 @@
 
 'use strict';
 
-function showAddProtoModal() {
+function showAddProtoModal(insertIdx) {
     const overlay = _div('modal-overlay');
     const modal = _div('modal');
     modal.innerHTML = `<div class="modal-header"><h3>Add Prototype</h3><button class="modal-close">\u00d7</button></div>
@@ -74,7 +74,7 @@ function showAddProtoModal() {
             <div class="modal-back-row"><button class="modal-back-btn">\u2190 Back</button></div>`;
         body.querySelector('[data-mode="empty"]').addEventListener('click', () => {
             overlay.remove();
-            addNewPrototype(type);
+            addNewPrototype(type, insertIdx);
         });
         if (canCopy) {
             body.querySelector('[data-mode="copy"]').addEventListener('click', () => showStepCopy(resolved.key));
@@ -108,7 +108,7 @@ function showAddProtoModal() {
                     el.textContent = r.id;
                     el.addEventListener('click', () => {
                         overlay.remove();
-                        copyPrototype(type, r.id);
+                        copyPrototype(type, r.id, insertIdx);
                     });
                     listEl.appendChild(el);
                 }
@@ -145,7 +145,7 @@ function findProtoEntries(type) {
  * and the id is mutated to a unique name so the new entry doesn't
  * collide with the original.
  */
-async function copyPrototype(type, sourceId) {
+async function copyPrototype(type, sourceId, insertIdx) {
     const entries = state.protoIndex?.[type] || [];
     const entry = entries.find(e => e.id === sourceId);
     if (!entry?.file) { toast('Source prototype not found in index'); return; }
@@ -166,12 +166,16 @@ async function copyPrototype(type, sourceId) {
     if (!Array.isArray(fs.yaml)) fs.yaml = [];
     const clone = JSON.parse(JSON.stringify(src));
     clone.id = _generateUniqueProtoId(type, sourceId);
-    fs.yaml.push(clone);
+    const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
+        ? insertIdx : fs.yaml.length;
+    fs.yaml.splice(at, 0, clone);
     fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
-    const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
-    if (area) area.scrollTop = area.scrollHeight;
+    if (at === fs.yaml.length - 1) {
+        const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
+        if (area) area.scrollTop = area.scrollHeight;
+    }
 }
 
 function _generateUniqueProtoId(type, base) {
@@ -183,7 +187,7 @@ function _generateUniqueProtoId(type, base) {
     return id;
 }
 
-function addNewPrototype(type) {
+function addNewPrototype(type, insertIdx) {
     const fs = state.openFiles.get(state.currentFile);
     if (!fs) return;
     if (!Array.isArray(fs.yaml)) fs.yaml = [];
@@ -194,10 +198,14 @@ function addNewPrototype(type) {
     // parent control still works without seeding because the user can click
     // "+ Add item" on the parent bar which commits an empty slot via
     // `onParentChange` — keeping the add-item codepath intact.
-    fs.yaml.push(proto);
+    const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
+        ? insertIdx : fs.yaml.length;
+    fs.yaml.splice(at, 0, proto);
     fs.structuralChange = true;
     commitChange(fs);
     renderEditor();
-    const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
-    if (area) area.scrollTop = area.scrollHeight;
+    if (at === fs.yaml.length - 1) {
+        const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
+        if (area) area.scrollTop = area.scrollHeight;
+    }
 }

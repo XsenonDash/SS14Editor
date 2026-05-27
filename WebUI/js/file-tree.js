@@ -164,7 +164,7 @@ document.getElementById('file-tree').addEventListener('contextmenu', e => {
 });
 
 async function promptCreateFile(dir) {
-    const name = prompt('Enter new file name:', 'new-prototype.yml');
+    const name = await inputPrompt('Enter new file name:', 'new-prototype.yml', { title: 'New File' });
     if (!name) return;
     try {
         const res = await api.createFile(dir, name, '');
@@ -187,7 +187,7 @@ async function promptCreateFile(dir) {
 
 async function promptRenameFile(path) {
     const oldName = path.split('/').pop();
-    const newName = prompt('Rename file:', oldName);
+    const newName = await inputPrompt('Rename file:', oldName, { title: 'Rename File' });
     if (!newName || newName === oldName) return;
     try {
         const res = await api.renameFile(path, newName);
@@ -220,7 +220,7 @@ async function promptDeleteFile(path) {
 }
 
 async function promptCreateFolder(parentDir) {
-    const name = prompt('Enter new folder name:', 'NewFolder');
+    const name = await inputPrompt('Enter new folder name:', 'NewFolder', { title: 'New Folder' });
     if (!name) return;
     try {
         await api.createFolder(parentDir, name);
@@ -234,7 +234,7 @@ async function promptCreateFolder(parentDir) {
 
 async function promptRenameFolder(path) {
     const oldName = path.split('/').pop();
-    const newName = prompt('Rename folder:', oldName);
+    const newName = await inputPrompt('Rename folder:', oldName, { title: 'Rename Folder' });
     if (!newName || newName === oldName) return;
     try {
         const res = await api.renameFolder(path, newName);

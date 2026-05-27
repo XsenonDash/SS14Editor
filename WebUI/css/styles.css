@@ -34,6 +34,7 @@
     --error:            #da373c;
     --warning:          #f0b132;
     --info:             #5865f2;
+    --comment:          #6a9955;
 
     /* Radii / shadows */
     --radius-sm:  4px;
@@ -766,8 +767,14 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     position: relative;
 }
 .sprite-input-label {
-    font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);
+    font-family: var(--font-mono); font-size: 13px; color: var(--yaml-key);
     width: 40px; flex-shrink: 0; text-align: right;
+    font-weight: 400;
+}
+.sprite-input-label::after {
+    content: ': ';
+    color: var(--yaml-punct);
+    font-weight: 400;
 }
 .sprite-input { flex: 1; }
 .sprite-state-dropdown {
@@ -937,6 +944,10 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 .list-editor, .map-editor { display: flex; flex-direction: column; gap: 4px; }
 /* Tuple: elements side by side, like a compact record */
 .tuple-editor { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.tuple-element { display: inline-flex; align-items: center; gap: 2px; }
+.tuple-element > .field-comment-btn,
+.tuple-element > .field-inline-comment,
+.tuple-element > .field-comment-delete-btn { align-self: center; }
 /* When a list row contains a tuple editor, the content cell must NOT stretch —
    it should shrink-wrap so the remove button sits right after the last field. */
 .list-item:has(> .list-item-content > .tuple-editor) > .list-item-content {
@@ -1033,6 +1044,326 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     display: flex; gap: 10px; align-items: center;
     padding: 16px 0; flex-shrink: 0;
 }
+
+/* ======================== YAML Comments ========================== */
+/*  Three surfaces:
+    1. .yaml-comment-block.--proto     — block ABOVE a proto card,
+       inserted by the inter-proto toolbar / renderEditor.
+    2. .yaml-comment-block.--field     — block ABOVE a field row
+       (multi-line commentBefore on the key).
+    3. .field-inline-comment            — trailing "# text" rendered
+       INSIDE the field-row, after the value control.
+   All three share the green --comment palette and YAML "# " prefix. */
+.yaml-comment-block,
+.field-inline-comment {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.5;
+    user-select: none;
+}
+.yaml-comment-block { position: relative; }
+
+.yaml-comment-block--proto {
+    padding: 6px 14px 2px;
+    margin-bottom: -2px;
+}
+.yaml-comment-block--trailing {
+    padding: 6px 14px 8px;
+    margin-top: -2px;
+}
+.yaml-comment-block--field {
+    padding: 2px 4px 0 36px;
+    margin-bottom: -2px;
+}
+.yaml-comment-view { display: flex; flex-direction: column; gap: 0; }
+.yaml-comment-line { display: flex; align-items: baseline; }
+.yaml-comment-hash { color: var(--comment); font-weight: 700; flex-shrink: 0; }
+.yaml-comment-text { color: var(--comment); white-space: pre-wrap; word-break: break-word; }
+
+/* Trailing inline comment rendered inside the field row */
+.field-inline-comment {
+    margin-left: 6px;
+    flex-shrink: 1;
+    min-width: 0;
+    min-height: 22px;
+    align-self: center;
+    align-items: center;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    padding: 0 4px;
+    transition: background .15s;
+}
+.field-inline-comment:hover { background: var(--bg-surface-hover); }
+.field-inline-comment .yaml-comment-view { flex-direction: row; flex-wrap: wrap; }
+
+/* Chat-bubble (add-comment) and × delete-comment buttons — square,
+   borderless-by-default, hover-revealed. On own hover: green outline +
+   green icon (--comment), NO background fill. Both share the same shape
+   so they visually read as one related pair. */
+.field-comment-btn,
+.field-comment-delete-btn {
+    background: none;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    margin-left: 2px;
+    width: 22px;
+    height: 22px;
+    box-sizing: border-box;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity .15s ease, color .15s, border-color .15s;
+}
+.field-row:hover .field-comment-btn,
+.field-row:focus-within .field-comment-btn,
+.field-row:hover .field-comment-delete-btn,
+.field-row:focus-within .field-comment-delete-btn,
+.component-header:hover .field-comment-btn,
+.component-header:focus-within .field-comment-btn,
+.component-header:hover .field-comment-delete-btn,
+.component-header:focus-within .field-comment-delete-btn,
+.proto-type-line:hover > .field-comment-btn,
+.proto-type-line:focus-within > .field-comment-btn,
+.proto-type-line:hover > .field-comment-delete-btn,
+.proto-type-line:focus-within > .field-comment-delete-btn,
+.list-item:hover .field-comment-btn,
+.list-item:focus-within .field-comment-btn,
+.list-item:hover .field-comment-delete-btn,
+.list-item:focus-within .field-comment-delete-btn,
+.map-entry:hover > .field-comment-btn,
+.map-entry:focus-within > .field-comment-btn,
+.map-entry:hover > .field-comment-delete-btn,
+.map-entry:focus-within > .field-comment-delete-btn,
+.map-entry-header:hover .field-comment-btn,
+.map-entry-header:focus-within .field-comment-btn,
+.map-entry-header:hover .field-comment-delete-btn,
+.map-entry-header:focus-within .field-comment-delete-btn,
+.tuple-element:hover > .field-comment-btn,
+.tuple-element:focus-within > .field-comment-btn,
+.tuple-element:hover > .field-comment-delete-btn,
+.tuple-element:focus-within > .field-comment-delete-btn,
+.datadef-body .field-row:hover .field-comment-btn,
+.datadef-body .field-row:focus-within .field-comment-btn,
+.datadef-body .field-row:hover .field-comment-delete-btn,
+.datadef-body .field-row:focus-within .field-comment-delete-btn { opacity: .6; }
+.field-comment-btn:hover,
+.field-comment-delete-btn:hover {
+    opacity: 1;
+    color: var(--comment);
+    border-color: var(--comment);
+    background: none;
+}
+
+/* Inter-proto toolbar between proto cards, styled like collapse-btn */
+.inter-proto-toolbar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    margin: 4px 0;
+    min-height: 18px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.inter-proto-toolbar:hover,
+.inter-proto-toolbar:focus-within { opacity: 1; }
+/* In an empty file the toolbar is the only way to add the first proto, so
+   keep it fully visible regardless of hover. */
+.group-content:has(> .empty-state) > .inter-proto-toolbar { opacity: 1; }
+/* When a proto comment block is being dragged, show every toolbar so the
+   user has visible drop targets between every pair of cards. */
+.editor-area.dragging-proto-comment .inter-proto-toolbar { opacity: 1; }
+.inter-proto-toolbar.drop-target {
+    opacity: 1;
+    background: rgba(120, 170, 255, 0.18);
+    outline: 1px dashed var(--accent, #6aa0ff);
+    border-radius: 3px;
+}
+.yaml-comment-block--draggable { cursor: grab; }
+.yaml-comment-block--draggable:active { cursor: grabbing; }
+.yaml-comment-block.dragging { opacity: 0.45; }
+.inter-proto-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    transition: color .15s, background .15s;
+}
+.inter-proto-btn--add:hover     { color: var(--accent);  background: var(--bg-surface-hover); }
+.inter-proto-btn--comment:hover { color: var(--comment); background: var(--bg-surface-hover); }
+
+/* In-place comment editor — same width as the surrounding host, monospace,
+   coloured like a comment. Replaces the .yaml-comment-view on click. */
+.yaml-comment-inplace {
+    width: 100%;
+    min-width: 200px;
+    box-sizing: border-box;
+    background: var(--bg-input);
+    border: 1px solid var(--border-focus);
+    border-radius: var(--radius-sm);
+    color: var(--comment);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 2px 6px;
+    resize: vertical;
+    outline: none;
+    line-height: 1.4;
+}
+.yaml-comment-inplace--new { min-height: 22px; }
+.yaml-comment-view--editable { cursor: pointer; }
+.yaml-comment-host { display: inline-flex; min-width: 0; max-width: 100%; }
+.field-inline-comment--editing { flex: 1; min-width: 200px; padding: 2px 0; }
+
+/* Make standalone comment-blocks (proto, trailing, field-before) hover-show
+   their delete button, identical to .field-inline-comment behaviour. */
+.yaml-comment-block { position: relative; }
+.yaml-comment-block-del {
+    position: absolute;
+    right: 6px;
+    top: 2px;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.yaml-comment-block:hover .yaml-comment-block-del,
+.yaml-comment-block:focus-within .yaml-comment-block-del { opacity: 1; }
+.yaml-comment-block--editing { padding: 4px 14px; }
+
+/* Compact comment block placed ABOVE a sequence item (list-editor row).
+   The standard .--field block is full-width with an absolute-positioned
+   × that would otherwise fly to the editor's right edge. For per-item
+   comments we want the bubble to hug the comment text and place × right
+   next to it, indented to align with the item content. */
+.yaml-comment-block--seq-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 4px 1px 6px;
+    margin-left: 18px;            /* align under .drag-handle width */
+    width: fit-content;
+    max-width: calc(100% - 24px);
+    border-radius: var(--radius-sm);
+}
+.yaml-comment-block--seq-item .yaml-comment-block-del {
+    position: static;
+    margin-left: 2px;
+}
+/* Between-proto comment block: hug content + place × next to text instead
+   of pinning it to the right edge of the editor area. */
+.yaml-comment-block--proto {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 4px;
+    width: fit-content;
+    max-width: 100%;
+}
+.yaml-comment-block--proto .yaml-comment-block-del {
+    position: static;
+    margin-top: 2px;
+}
+/* Trailing-file comment block: same treatment. */
+.yaml-comment-block--trailing {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: 4px;
+    width: fit-content;
+    max-width: 100%;
+}
+.yaml-comment-block--trailing .yaml-comment-block-del {
+    position: static;
+    margin-top: 2px;
+}
+/* Inline comment hosted inside the proto-type-line ("- type: entity # cmt"). */
+.proto-type-line > .field-inline-comment {
+    margin-left: 8px;
+    align-self: baseline;
+    min-width: 0;
+    max-width: 60%;
+}
+
+/* ── Inline comments on list-items ──────────────────────────────────
+   .list-item rearranges children with `order`: drag-handle=0, ::before=1
+   (the "- " dash), list-item-content=2, item-remove-btn=9. New comment
+   surfaces appended via attachInlineComment land at DOM-end but have no
+   explicit order — by default order:0 they'd appear BEFORE the dash. Give
+   them order 10/11 so they sit AFTER the × remove-button, as the visual
+   trail of the row. */
+.list-item > .field-comment-btn          { order: 10; }
+.list-item > .field-inline-comment       { order: 10; align-self: baseline; }
+.list-item > .field-comment-delete-btn   { order: 11; }
+
+/* Same trailing order for inline map entries (mirrors .list-item layout) */
+.map-entry > .field-comment-btn          { order: 10; }
+.map-entry > .field-inline-comment       { order: 10; align-self: baseline; }
+.map-entry > .field-comment-delete-btn   { order: 11; }
+/* Block-form map entries: comment buttons live inside the .map-entry-header
+   alongside the entry-remove-btn (the row itself is flex-column so an
+   appended button would end up under the value). */
+.map-entry-header > .field-comment-btn          { order: 10; }
+.map-entry-header > .field-inline-comment       { order: 10; align-self: baseline; }
+.map-entry-header > .field-comment-delete-btn   { order: 11; }
+
+/* Inline editor (textarea + Save/Cancel) shared by all comment surfaces */
+.yaml-comment-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 0;
+    width: 100%;
+    flex-basis: 100%;
+}
+.yaml-comment-editor--proto { padding: 4px 14px; }
+
+.yaml-comment-textarea {
+    width: 100%;
+    min-height: 30px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-focus);
+    border-radius: var(--radius-sm);
+    color: var(--comment);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 4px 6px;
+    resize: vertical;
+    outline: none;
+}
+.yaml-comment-edit-btns {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+}
+.yaml-comment-save-btn {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    background: var(--accent);
+    color: #fff;
+}
+.yaml-comment-save-btn:hover   { background: var(--accent-hover); }
+.yaml-comment-cancel-btn {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    background: var(--bg-surface-hover);
+    color: var(--text-secondary);
+}
+.yaml-comment-cancel-btn:hover { background: var(--bg-surface-active); }
 .add-proto-btn {
     background: var(--accent); border: none; color: #fff;
     padding: 7px 18px; border-radius: var(--radius-sm);
@@ -1086,6 +1417,53 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 .dropdown-empty {
     padding: 12px; color: var(--text-muted); text-align: center; font-size: 13px;
 }
+
+/* Input-prompt modal (Electron replacement for window.prompt) */
+.modal-prompt { padding: 18px; gap: 12px; }
+.modal-title {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.modal-prompt-message {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+.modal-prompt-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: var(--bg-input);
+    border: 1px solid var(--border-focus);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 6px 8px;
+    outline: none;
+    margin-bottom: 12px;
+}
+.modal-btns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+.modal-btn {
+    font-size: 12px;
+    padding: 5px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    background: var(--bg-surface);
+    color: var(--text-primary);
+}
+.modal-btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.modal-btn-secondary:hover { background: var(--bg-surface-hover); }
 
 /* ======================== Responsive ==================== */
 @media (max-width: 900px) { :root { --sidebar-w: 220px; } }

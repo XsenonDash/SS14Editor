@@ -107,3 +107,48 @@ function toast(msg, type = 'info') {
     requestAnimationFrame(() => t.classList.add('visible'));
     setTimeout(() => { t.classList.remove('visible'); setTimeout(() => t.remove(), 300); }, 2200);
 }
+
+// ======================== INPUT PROMPT (Electron-safe) ==================
+// window.prompt() is not implemented in Electron (returns null silently),
+// so file-tree create / rename actions need this modal replacement.
+function inputPrompt(message, defaultValue = '', { title = '', okLabel = 'OK', cancelLabel = 'Cancel' } = {}) {
+    return new Promise(resolve => {
+        const overlay = _div('modal-overlay');
+        const modal = _div('modal modal-prompt');
+        if (title) {
+            const h = _el('div'); h.className = 'modal-title'; h.textContent = title; modal.appendChild(h);
+        }
+        const msg = _el('div'); msg.className = 'modal-prompt-message'; msg.textContent = message; modal.appendChild(msg);
+        const input = _el('input');
+        input.type = 'text';
+        input.className = 'modal-prompt-input';
+        input.value = defaultValue;
+        input.spellcheck = false;
+        modal.appendChild(input);
+        const btnRow = _div('modal-btns');
+        const cancelBtn = _el('button'); cancelBtn.type = 'button'; cancelBtn.textContent = cancelLabel; cancelBtn.className = 'modal-btn modal-btn-secondary';
+        const okBtn = _el('button'); okBtn.type = 'button'; okBtn.textContent = okLabel; okBtn.className = 'modal-btn modal-btn-primary';
+        btnRow.appendChild(cancelBtn); btnRow.appendChild(okBtn);
+        modal.appendChild(btnRow);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        function close(result) { overlay.remove(); resolve(result); }
+        cancelBtn.addEventListener('click', () => close(null));
+        okBtn.addEventListener('click', () => close(input.value));
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(null); });
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); close(input.value); }
+            if (e.key === 'Escape') { e.preventDefault(); close(null); }
+        });
+        setTimeout(() => {
+            input.focus();
+            // Select filename stem (before the last dot) so users can quickly
+            // overwrite the name while keeping the extension.
+            const dot = defaultValue.lastIndexOf('.');
+            if (dot > 0) input.setSelectionRange(0, dot);
+            else input.select();
+        }, 0);
+    });
+}
+

@@ -44,7 +44,7 @@ function renderEditor(groupId) {
     const protos = fs.yaml;
     if (!Array.isArray(protos) || protos.length === 0) {
         area.innerHTML = '<div class="empty-state"><p>No prototypes found in this file.</p></div>';
-        area.appendChild(buildAddProtoFooter());
+        area.appendChild(buildInterProtoToolbar(filePath, 0, 0));
         return;
     }
 
@@ -60,13 +60,20 @@ function renderEditor(groupId) {
         let focusKey = null;
         let focusSelStart = null, focusSelEnd = null;
         if (focusedEl && area.contains(focusedEl)) {
-            // Build a stable key from the nearest proto-card's id + the field-row key.
+            // Build a stable key from the nearest proto-card's id, the
+            // optional containing component's type, and the field-row key.
+            // Without the component type, two components in the same proto
+            // that expose the same field name (e.g. `description`) would
+            // collide and focus would jump to the first match, eating the
+            // user's keystrokes in the second card.
             const protoCard = focusedEl.closest('.proto-card');
             const protoId = protoCard?.dataset?.protoId ?? '';
+            const compCard = focusedEl.closest('.component-card');
+            const compType = compCard?.dataset?.compType ?? '';
             const fieldRow = focusedEl.closest('[data-field-key]');
             const fieldKey = fieldRow?.dataset?.fieldKey ?? '';
             if (fieldKey) {
-                focusKey = `${protoId}::${fieldKey}`;
+                focusKey = `${protoId}::${compType}::${fieldKey}`;
             }
             if (focusedEl.selectionStart !== undefined) {
                 focusSelStart = focusedEl.selectionStart;
@@ -76,6 +83,12 @@ function renderEditor(groupId) {
 
         area.innerHTML = '';
         for (let i = 0; i < protos.length; i++) {
+            // Inter-proto toolbar BEFORE this proto (also acts as the very-top toolbar
+            // when i === 0). The comment block (if any) is rendered after the toolbar
+            // so it visually sits between the toolbar and the card it belongs to.
+            area.appendChild(buildInterProtoToolbar(filePath, i, protos.length));
+            const pcb = buildProtoCommentBlock(filePath, i);
+            if (pcb) area.appendChild(pcb);
             try {
                 area.appendChild(buildCard(protos[i], i, filePath));
             } catch (e) {
@@ -85,18 +98,24 @@ function renderEditor(groupId) {
                 area.appendChild(errCard);
             }
         }
-        area.appendChild(buildAddProtoFooter());
+        // Trailing toolbar (add + trailing-comment) after the last proto.
+        area.appendChild(buildInterProtoToolbar(filePath, protos.length, protos.length));
+        const trailing = buildTrailingCommentBlock(filePath);
+        if (trailing) area.appendChild(trailing);
 
         // Restore collapse state and scroll position
         restoreCollapseState(area, collapseState);
         area.scrollTop = savedScroll;
-        // Restore focus to the same field (identified by protoId::fieldKey).
+        // Restore focus to the same field (identified by protoId::compType::fieldKey).
         if (focusKey) {
-            const [protoId, fieldKey] = focusKey.split('::');
+            const [protoId, compType, fieldKey] = focusKey.split('::');
             const card = protoId
                 ? area.querySelector(`.proto-card[data-proto-id="${CSS.escape(protoId)}"]`)
                 : area;
-            const newFocus = (card ?? area).querySelector(`[data-field-key="${CSS.escape(fieldKey)}"]`);
+            const scope = compType
+                ? (card ?? area).querySelector(`.component-card[data-comp-type="${CSS.escape(compType)}"]`)
+                : (card ?? area);
+            const newFocus = (scope ?? card ?? area).querySelector(`[data-field-key="${CSS.escape(fieldKey)}"]`);
             if (newFocus) {
                 const inp = newFocus.querySelector('input, select, textarea') ?? newFocus;
                 if (inp && (inp.tagName === 'INPUT' || inp.tagName === 'SELECT' || inp.tagName === 'TEXTAREA')) {
@@ -197,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (container) {
         container.addEventListener('contextmenu', e => {
             if (!e.target.closest('.group-content')) return;
-            if (e.target.closest('.proto-card, .field-row, .component-card, .add-proto-footer')) return;
+            if (e.target.closest('.proto-card, .field-row, .component-card, .add-proto-footer, .inter-proto-toolbar, .yaml-comment-block, .yaml-comment-editor')) return;
             e.preventDefault();
             showContextMenu(e.clientX, e.clientY, [
                 { label: 'Collapse all prototypes', action: () => collapseAllProtos(true) },

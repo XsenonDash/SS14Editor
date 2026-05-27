@@ -116,6 +116,7 @@ function startFileEventStream() {
                 fs.structuralChange = false;
                 fs.history = [content];
                 fs.historyIdx = 0;
+                relinkProtoAst(fs);
                 state.resolvedCache.clear();
                 // Re-render every group whose active tab is this file.
                 state.groups.filter(g => g.activeTab === path).forEach(g => renderEditor(g.id));

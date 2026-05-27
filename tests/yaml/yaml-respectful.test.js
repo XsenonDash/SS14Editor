@@ -29,7 +29,14 @@ if (!YAML || typeof YAML.parseDocument !== 'function') {
 const yamlJsSrc = fs.readFileSync(path.join(repoRoot, 'WebUI/js/yaml.js'), 'utf8');
 const jsSandbox = { YAML, console };
 vm.runInNewContext(yamlJsSrc, jsSandbox);
-const { parseYamlDoc, dumpYamlRespectful, dumpYaml, docSetField, docDeleteField } = jsSandbox;
+const { parseYamlDoc, dumpYamlRespectful, dumpYaml, docSetField, docDeleteField,
+    dumpYamlRespectfulStructural, relinkProtoAst,
+    getProtoCommentBefore, patchProtoCommentInContent,
+    getTrailingComment, patchTrailingCommentInContent,
+    getFieldInlineComment, setFieldInlineComment,
+    getFieldCommentBefore, setFieldCommentBefore,
+    getComponentFieldInlineComment, setComponentFieldInlineComment,
+    getComponentFieldCommentBefore, setComponentFieldCommentBefore } = jsSandbox;
 if (typeof dumpYamlRespectful !== 'function') {
     throw new Error('yaml.js did not expose dumpYamlRespectful');
 }
@@ -338,6 +345,372 @@ test('sequence items sit at the same indent as their parent key (indentSeq: fals
     assertNotContains(respectful, '\n    - type: MeleeWeapon', 'respectful: not 4-space seq item');
     assertContains   (full, '\n  - type: MeleeWeapon', 'full: 2-space seq item');
     assertNotContains(full, '\n    - type: MeleeWeapon', 'full: not 4-space seq item');
+});
+
+
+// ════════════════════════════════════════════════════════════════════
+//  Comment-interaction coverage tests
+//  These exercise every code path the WebUI uses to read/write comments
+//  on proto-level fields, component fields, between-proto blocks, and
+//  the trailing-file slot — plus the structural-dump WeakMap identity
+//  path that backs add/remove/duplicate-id scenarios.
+// ════════════════════════════════════════════════════════════════════
+
+// Tiny helper — mirrors `fs` shape just enough for relinkProtoAst.
+function makeFs(text) {
+    const { protos, doc } = parseYamlDoc(text);
+    const fs = { yaml: protos, doc, content: text };
+    relinkProtoAst(fs);
+    return fs;
+}
+
+// ── relinkProtoAst ───────────────────────────────────────────────────
+
+test('relinkProtoAst maps each JS proto to its AST item node', () => {
+    const fs = makeFs(`- type: A\n  id: a\n- type: B\n  id: b\n`);
+    assert.strictEqual(fs.protoAstRefs.get(fs.yaml[0]), fs.doc.contents.items[0]);
+    assert.strictEqual(fs.protoAstRefs.get(fs.yaml[1]), fs.doc.contents.items[1]);
+});
+
+test('relinkProtoAst tolerates length mismatch (uses min)', () => {
+    const fs = makeFs(`- type: A\n  id: a\n`);
+    // Adding a JS proto without re-parsing → WeakMap only links existing ones.
+    fs.yaml.push({ type: 'B', id: 'b' });
+    relinkProtoAst(fs);
+    assert.strictEqual(fs.protoAstRefs.get(fs.yaml[0]), fs.doc.contents.items[0]);
+    assert.strictEqual(fs.protoAstRefs.get(fs.yaml[1]), undefined);
+});
+
+// ── dumpYamlRespectfulStructural ─────────────────────────────────────
+
+test('structural dump preserves clean bodies when adding a new proto at end', () => {
+    const text = `# header\n- type: A\n  id: a\n  v: 1\n- type: B\n  id: b\n  v: 2\n`;
+    const fs = makeFs(text);
+    fs.yaml.push({ type: 'C', id: 'c', v: 3 });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    assertContains(out, '# header');
+    assertContains(out, 'id: a');
+    assertContains(out, 'id: b');
+    assertContains(out, 'id: c');
+    // Bodies of A and B should be byte-preserved.
+    assertContains(out, '- type: A\n  id: a\n  v: 1');
+    assertContains(out, '- type: B\n  id: b\n  v: 2');
+});
+
+test('structural dump preserves clean bodies when adding a new proto at start', () => {
+    const text = `- type: A\n  id: a\n- type: B\n  id: b\n`;
+    const fs = makeFs(text);
+    fs.yaml.unshift({ type: 'Z', id: 'z' });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    const reparsed = parseYamlDoc(out).protos;
+    assert.strictEqual(reparsed.length, 3);
+    assert.strictEqual(reparsed[0].id, 'z');
+    assert.strictEqual(reparsed[1].id, 'a');
+    assert.strictEqual(reparsed[2].id, 'b');
+});
+
+test('structural dump preserves clean bodies when removing a proto', () => {
+    const text = `- type: A\n  id: a\n- type: B\n  id: b\n- type: C\n  id: c\n`;
+    const fs = makeFs(text);
+    fs.yaml.splice(1, 1); // remove B
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    const reparsed = parseYamlDoc(out).protos;
+    assert.strictEqual(reparsed.length, 2);
+    assert.strictEqual(reparsed[0].id, 'a');
+    assert.strictEqual(reparsed[1].id, 'c');
+    assertNotContains(out, 'id: b');
+});
+
+test('structural dump preserves comments between protos (clean blocks)', () => {
+    const text = `- type: A\n  id: a\n# block comment\n- type: B\n  id: b\n`;
+    const fs = makeFs(text);
+    fs.yaml.push({ type: 'C', id: 'c' });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    assertContains(out, '# block comment');
+    assertContains(out, 'id: c');
+});
+
+test('structural dump: duplicate ids never produce duplicate bodies', () => {
+    // Regression: id-based slice matching used to emit B's body twice when
+    // a new proto with the same id was inserted before B (both resolved to
+    // the same slice). WeakMap AST identity eliminates the ambiguity.
+    const text = `- type: T\n  id: NewPrototype\n  v: 1\n- type: T\n  id: other\n  v: 2\n`;
+    const fs = makeFs(text);
+    // Insert a fresh proto at index 0 that happens to also be 'NewPrototype'.
+    fs.yaml.unshift({ type: 'T', id: 'NewPrototype', v: 99 });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    const reparsed = parseYamlDoc(out).protos;
+    assert.strictEqual(reparsed.length, 3, 'must yield exactly 3 protos');
+    assert.strictEqual(reparsed[0].v, 99);
+    assert.strictEqual(reparsed[1].v, 1);
+    assert.strictEqual(reparsed[2].v, 2);
+});
+
+test('structural dump: new proto without AST link is serialized fresh', () => {
+    const text = `- type: A\n  id: a\n`;
+    const fs = makeFs(text);
+    fs.yaml.push({ type: 'B', id: 'b', v: 7 });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    assertContains(out, 'id: b');
+    assertContains(out, 'v: 7');
+});
+
+// ── Inter-proto comment patch (raw-content) ──────────────────────────
+
+test('patchProtoCommentInContent adds a fresh comment before a proto', () => {
+    const text = `- type: A\n  id: a\n- type: B\n  id: b\n`;
+    const { doc } = parseYamlDoc(text);
+    const result = patchProtoCommentInContent(text, doc, 1, 'hello world');
+    assert.ok(result);
+    assertContains(result.newContent, '# hello world');
+    assertContains(result.newContent, '- type: B');
+    const got = getProtoCommentBefore(result.newDoc, 1);
+    assert.ok(got && got.includes('hello world'), `got=${JSON.stringify(got)}`);
+});
+
+test('patchProtoCommentInContent replaces an existing comment', () => {
+    const text = `- type: A\n  id: a\n# old\n- type: B\n  id: b\n`;
+    const { doc } = parseYamlDoc(text);
+    const result = patchProtoCommentInContent(text, doc, 1, 'new');
+    assert.ok(result);
+    assertContains   (result.newContent, '# new');
+    assertNotContains(result.newContent, '# old');
+});
+
+test('patchProtoCommentInContent clears an existing comment when newText is null', () => {
+    const text = `- type: A\n  id: a\n# bye\n- type: B\n  id: b\n`;
+    const { doc } = parseYamlDoc(text);
+    const result = patchProtoCommentInContent(text, doc, 1, null);
+    assert.ok(result);
+    assertNotContains(result.newContent, '# bye');
+    assertContains   (result.newContent, '- type: B');
+});
+
+test('patchProtoCommentInContent supports multi-line comments', () => {
+    const text = `- type: A\n  id: a\n- type: B\n  id: b\n`;
+    const { doc } = parseYamlDoc(text);
+    const result = patchProtoCommentInContent(text, doc, 1, 'line one\nline two');
+    assert.ok(result);
+    assertContains(result.newContent, '# line one');
+    assertContains(result.newContent, '# line two');
+});
+
+// ── Trailing-file comment ────────────────────────────────────────────
+
+test('getTrailingComment reads an existing trailing block', () => {
+    const text = `- type: A\n  id: a\n\n# bye\n# bye2\n`;
+    const { doc } = parseYamlDoc(text);
+    const out = getTrailingComment(text, doc);
+    assert.strictEqual(out, 'bye\nbye2');
+});
+
+test('getTrailingComment returns null when nothing follows the last proto', () => {
+    const text = `- type: A\n  id: a\n`;
+    const { doc } = parseYamlDoc(text);
+    assert.strictEqual(getTrailingComment(text, doc), null);
+});
+
+test('patchTrailingCommentInContent adds, replaces, and clears the trailing comment', () => {
+    const text = `- type: A\n  id: a\n`;
+    const { doc } = parseYamlDoc(text);
+
+    // Add.
+    const added = patchTrailingCommentInContent(text, doc, 'farewell');
+    assert.ok(added);
+    assertContains(added.newContent, '# farewell');
+
+    // Replace.
+    const replaced = patchTrailingCommentInContent(added.newContent, added.newDoc, 'see ya');
+    assert.ok(replaced);
+    assertContains   (replaced.newContent, '# see ya');
+    assertNotContains(replaced.newContent, '# farewell');
+
+    // Clear.
+    const cleared = patchTrailingCommentInContent(replaced.newContent, replaced.newDoc, null);
+    assert.ok(cleared);
+    assertNotContains(cleared.newContent, '# see ya');
+    assertContains   (cleared.newContent, 'id: a');
+});
+
+// ── Proto-field inline comments (scalar / single-seq / map / multi-seq) ─
+
+test('field inline comment round-trips on a scalar value', () => {
+    const text = `- type: A\n  id: a\n  v: 1\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'v', 'hello'), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, 'v: 1 # hello');
+    const reparsed = parseYamlDoc(out);
+    assert.strictEqual(getFieldInlineComment(reparsed.doc, 0, 'v'), ' hello');
+});
+
+test('field inline comment round-trips on a single-item flow sequence', () => {
+    const text = `- type: A\n  id: a\n  tags:\n  - solo\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'tags', 'note'), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, '# note');
+});
+
+test('field inline comment on a multi-item Seq uses value.commentBefore slot', () => {
+    const text = `- type: A\n  id: a\n  tags:\n  - x\n  - y\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'tags', 'list cmt'), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, '# list cmt');
+    assertContains(out, '- x');
+    assertContains(out, '- y');
+});
+
+test('field inline comment on a Map value uses value.commentBefore slot', () => {
+    const text = `- type: A\n  id: a\n  attrs:\n    k: v\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'attrs', 'map cmt'), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, '# map cmt');
+    assertContains(out, 'k: v');
+});
+
+test('setFieldInlineComment(null) clears a previously-set inline comment', () => {
+    const text = `- type: A\n  id: a\n  v: 1 # bye\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'v', null), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertNotContains(out, '# bye');
+    assertContains   (out, 'v: 1');
+});
+
+test('setFieldInlineComment returns false for an unknown key', () => {
+    const text = `- type: A\n  id: a\n`;
+    const { doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldInlineComment(doc, 0, 'nope', 'x'), false);
+});
+
+// ── Proto-field commentBefore ────────────────────────────────────────
+
+test('setFieldCommentBefore writes and getFieldCommentBefore reads', () => {
+    const text = `- type: A\n  id: a\n  v: 1\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldCommentBefore(doc, 0, 'v', 'above'), true);
+    const got = getFieldCommentBefore(doc, 0, 'v');
+    assert.ok(got && got.includes('above'), `got=${JSON.stringify(got)}`);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, '# above');
+    assertContains(out, 'v: 1');
+});
+
+test('setFieldCommentBefore(null) clears a commentBefore', () => {
+    const text = `- type: A\n  id: a\n  # before\n  v: 1\n`;
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(setFieldCommentBefore(doc, 0, 'v', null), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertNotContains(out, '# before');
+});
+
+// ── Component-field comments ─────────────────────────────────────────
+
+test('component-field inline comment round-trips', () => {
+    const text = [
+        '- type: Entity',
+        '  id: e',
+        '  components:',
+        '  - type: MeleeWeapon',
+        '    damage: 5',
+        '',
+    ].join('\n');
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(
+        setComponentFieldInlineComment(doc, 0, 0, 'damage', 'big hits'), true);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, 'damage: 5 # big hits');
+});
+
+test('component-field commentBefore round-trips', () => {
+    const text = [
+        '- type: Entity',
+        '  id: e',
+        '  components:',
+        '  - type: MeleeWeapon',
+        '    damage: 5',
+        '',
+    ].join('\n');
+    const { protos, doc } = parseYamlDoc(text);
+    assert.strictEqual(
+        setComponentFieldCommentBefore(doc, 0, 0, 'damage', 'comment above'), true);
+    const got = getComponentFieldCommentBefore(doc, 0, 0, 'damage');
+    assert.ok(got && got.includes('comment above'), `got=${JSON.stringify(got)}`);
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assertContains(out, '# comment above');
+    assertContains(out, 'damage: 5');
+});
+
+test('component-field setters return false when the field is missing', () => {
+    const text = `- type: Entity\n  id: e\n  components:\n  - type: X\n`;
+    const { doc } = parseYamlDoc(text);
+    assert.strictEqual(setComponentFieldInlineComment(doc, 0, 0, 'nope', 'x'), false);
+    assert.strictEqual(setComponentFieldCommentBefore(doc, 0, 0, 'nope', 'x'), false);
+});
+
+// ── Comments survive structural changes (the integrated scenario) ────
+
+test('comments on clean proto survive while a dirty sibling is rewritten', () => {
+    const text = [
+        '# file header',
+        '- type: A',
+        '  id: a',
+        '  # before v',
+        '  v: 1     # inline v',
+        '# between A and B',
+        '- type: B',
+        '  id: b',
+        '  v: 2',
+        '',
+    ].join('\n');
+    const fs = makeFs(text);
+    // Mutate B only.
+    fs.yaml[1].v = 22;
+    docSetField(fs.doc, [1], 'v', 22);
+    const out = dumpYamlRespectful(fs.yaml, fs.doc, text, new Set([1]));
+    assertContains(out, '# file header');
+    assertContains(out, '# before v');
+    assertContains(out, '# inline v');
+    assertContains(out, '# between A and B');
+    assertContains(out, 'v: 22');
+});
+
+test('add-proto followed by structural dump keeps existing inline comments', () => {
+    const text = `- type: A\n  id: a\n  v: 1 # keep me\n- type: B\n  id: b\n`;
+    const fs = makeFs(text);
+    fs.yaml.splice(1, 0, { type: 'New', id: 'middle' });
+    const out = dumpYamlRespectfulStructural(fs.yaml, text, fs.doc, fs.protoAstRefs);
+    assertContains(out, '# keep me');
+    assertContains(out, 'id: middle');
+    const reparsed = parseYamlDoc(out).protos;
+    assert.strictEqual(reparsed.length, 3);
+});
+
+test('comment on a !type:Foo seq-item line parses onto item.commentBefore', () => {
+    const text = '- type: A\n  id: a\n  behaviors:\n  - !type:Foo # tag cmt\n    field: 1\n';
+    const { doc } = parseYamlDoc(text);
+    const beh = doc.contents.items[0].items.find(p => p.key.value === 'behaviors').value;
+    const item = beh.items[0];
+    assert.ok(YAML.isMap(item) && item.tag === '!type:Foo', 'expected tagged Map');
+    const cmt = (item.commentBefore || '').trim();
+    assert.strictEqual(cmt, 'tag cmt');
+    // The inner scalar's trailing comment must NOT also hold the same text
+    // (otherwise the comment would render twice after a re-emit).
+    assert.ok(!item.items[0].value.comment, `inner scalar should not carry the tag-line cmt; got ${JSON.stringify(item.items[0].value.comment)}`);
+});
+
+test('!type:Foo tagged value on a dict pair parses onto value.commentBefore', () => {
+    const text = '- type: A\n  id: a\n  shape: !type:PhysShapeCircle # circle cmt\n    radius: 0.5\n';
+    const { doc } = parseYamlDoc(text);
+    const pair = doc.contents.items[0].items.find(p => p.key.value === 'shape');
+    assert.ok(YAML.isMap(pair.value) && pair.value.tag === '!type:PhysShapeCircle');
+    const cmt = (pair.value.commentBefore || '').trim();
+    assert.strictEqual(cmt, 'circle cmt');
+    // getFieldInlineComment must surface that same comment.
+    assert.strictEqual(getFieldInlineComment(doc, 0, 'shape'), 'circle cmt');
 });
 
 

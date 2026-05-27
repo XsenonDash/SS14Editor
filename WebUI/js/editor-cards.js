@@ -78,11 +78,33 @@ function buildCard(proto, idx, filePath) {
         e.preventDefault(); e.stopPropagation();
         const items = [
             { label: 'Collapse / Expand', action: () => hdr.querySelector('.collapse-btn').click() },
-        ];        if (meta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(meta.className) });
+            { label: '# Add / edit comment before', action: () => {
+                const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);
+                const existing = area?.querySelector(`.yaml-comment-block[data-proto-comment-idx="${idx}"]`)
+                    || (area?.querySelector(`.proto-card[data-proto-idx="${idx}"]`)?.previousElementSibling?.classList?.contains('yaml-comment-block')
+                        ? area.querySelector(`.proto-card[data-proto-idx="${idx}"]`).previousElementSibling : null);
+                if (existing) {
+                    existing.querySelector('.yaml-comment-view--editable')?.click();
+                } else {
+                    const card = area?.querySelector(`.proto-card[data-proto-idx="${idx}"]`);
+                    let toolbar = card?.previousElementSibling;
+                    if (toolbar?.classList.contains('yaml-comment-block')) toolbar = toolbar.previousElementSibling;
+                    if (toolbar?.classList.contains('inter-proto-toolbar')) {
+                        toolbar.querySelector('.inter-proto-btn--comment')?.click();
+                    }
+                }
+            }},
+        ];
+        if (meta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(meta.className) });
         items.push('---', { label: 'Delete prototype', danger: true, action: () => hdr.querySelector('.delete-proto-btn').click() });
         showContextMenu(e.clientX, e.clientY, items);
     });
     card.appendChild(hdr);
+
+    // Inline comment for the proto header line (`- type: entity  # cmt`).
+    // Attach to the proto-type-line (a flex ROW) — NOT to hdr (which is a
+    // flex column, so appended children stack as new lines, breaking layout).
+    attachInlineComment(protoTypeLine, commentTargetForProtoField(filePath, idx, 'type'));
 
     // ── Drag-drop reorder ────────────────────────────────────────────
     // The handle is the only draggable surface so that text-selection in
@@ -168,6 +190,28 @@ function buildCard(proto, idx, filePath) {
     //    indentation, override-bar, and reset slot all line up. The id is
     //    mandatory: editing it clears the resolved-inheritance cache because
     //    other prototypes may reference it as a parent.
+    // Helper: render a key's commentBefore (if any) above the row, then
+    // the row itself, then attach the chat-bubble button + any trailing
+    // inline-comment span to the row.  Only does anything when fs.doc has
+    // the field present (matches the YAML pair).
+    const appendFieldWithComments = (row, fieldKey) => {
+        const before = buildFieldCommentBefore(filePath, idx, fieldKey);
+        if (before) body.appendChild(before);
+        body.appendChild(row);
+        attachFieldComment(row, filePath, idx, fieldKey);
+        // If the field value is a Seq, wire comment-targets on each list-item
+        // so users can add per-item comments (parent: [- A # ..., - B # ...]).
+        attachSeqItemCommentsForField(row, filePath, idx, fieldKey);
+        // Same for Map-valued fields: each `key: value` row gets its own
+        // inline-comment surface.
+        attachMapEntryCommentsForField(row, filePath, idx, fieldKey);
+        // Tuple elements (Seq form only) and dataDef inner fields, one
+        // level deep each — see attachTupleElementCommentsForField and
+        // attachDataDefFieldCommentsForField for the exact scope.
+        attachTupleElementCommentsForField(row, filePath, idx, fieldKey);
+        attachDataDefFieldCommentsForField(row, filePath, idx, fieldKey);
+    };
+
     const idMeta = { fieldKind: 'string', tag: 'id', required: true };
     const onIdChange = v => {
         const fs = state.openFiles.get(filePath);
@@ -176,11 +220,11 @@ function buildCard(proto, idx, filePath) {
         if (!newId || newId === fs.yaml[idx].id) return;
         setFieldValue([idx], 'id', newId, filePath);
     };
-    body.appendChild(fieldRow('id', idMeta, String(id), 'local', onIdChange, null));
+    appendFieldWithComments(fieldRow('id', idMeta, String(id), 'local', onIdChange, null), 'id');
     // 2. Abstract row (only when meta declares the field).
-    if (absRow) body.appendChild(absRow);
+    if (absRow) appendFieldWithComments(absRow, 'abstract');
     // 3. Parent row (only for inheriting prototypes).
-    if (parentRow) body.appendChild(parentRow);
+    if (parentRow) appendFieldWithComments(parentRow, 'parent');
 
     // Resolve inherited values
     let inherited = {};
@@ -197,7 +241,8 @@ function buildCard(proto, idx, filePath) {
             const { value, source } = getFieldValue(proto, f.tag, inherited, f.default);
 
             const onReset = source === 'local' ? () => deleteField([idx], f.tag, filePath) : null;
-            body.appendChild(fieldRow(f.tag, f, value, source, v => setFieldValue([idx], f.tag, v, filePath), onReset));
+            const row = fieldRow(f.tag, f, value, source, v => setFieldValue([idx], f.tag, v, filePath), onReset);
+            appendFieldWithComments(row, f.tag);
         }
     }
 
@@ -205,7 +250,8 @@ function buildCard(proto, idx, filePath) {
     for (const [k, v] of Object.entries(proto)) {
         if (k.startsWith('__') || renderedTags.has(k)) continue;
         const source = 'local'; // if in proto, it's local
-        body.appendChild(genericRow(k, v, source, nv => setFieldValue([idx], k, nv, filePath), () => deleteField([idx], k, filePath)));
+        const row = genericRow(k, v, source, nv => setFieldValue([idx], k, nv, filePath), () => deleteField([idx], k, filePath));
+        appendFieldWithComments(row, k);
     }
 
     // Inherited-only fields not yet shown
@@ -223,9 +269,10 @@ function buildCard(proto, idx, filePath) {
 
     card.appendChild(body);
 
-    // Context menu on editor area background for collapse/expand all
+    // Context menu on editor area: collapse / expand all (per-field comment
+    // options live on the field-comment-btn's own right-click handler).
     body.addEventListener('contextmenu', e => {
-        if (e.target.closest('.field-row, .component-card, .component-header')) return;
+        if (e.target.closest('.field-row, .component-card, .component-header, .yaml-comment-block, .field-comment-btn, .field-inline-comment')) return;
         e.preventDefault();
         showContextMenu(e.clientX, e.clientY, [
             { label: 'Collapse all prototypes', action: () => collapseAllProtos(true) },
