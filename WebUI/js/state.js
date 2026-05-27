@@ -12,6 +12,7 @@ const state = {
     currentFile: null,
     resolvedCache: new Map(),
     protoLookup: null,            // lazily-built Map<type:id → proto object> for O(1) resolveProto
+    fileProtoIds: null,           // lazily-built Map<file_path → string[]> of lowercase proto IDs per file
     parentFileCache: new Map(),   // filePath → parsed yaml array (for inheritance lookup)
     expandedDirs: new Set(),      // tree directory paths that are currently expanded (preserved across re-renders)
     gitStatus  : null,            // { available, files: { 'rel/path.yml': 'new'|'modified'|'deleted'|'renamed'|'conflict' } }

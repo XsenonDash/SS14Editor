@@ -35,9 +35,20 @@ function fileMenuItems(path, readOnly) {
 }
 
 function renderFileTree(nodes, container, filter = '') {
-    container.innerHTML = '';
     const filtered = filterTreeNodes(nodes, filter.toLowerCase());
-    buildTreeDom(filtered, container, 0);
+    const frag = document.createDocumentFragment();
+    // When a search filter is active, cap DOM construction at 300 nodes so a
+    // broad query (e.g. a single letter) doesn't freeze the browser for seconds.
+    const budget = filter ? { remaining: 300 } : null;
+    buildTreeDom(filtered, frag, 0, budget);
+    if (budget && budget.remaining <= 0) {
+        const msg = document.createElement('div');
+        msg.className = 'tree-searching';
+        msg.textContent = 'Too many results \u2014 type more to narrow down';
+        frag.appendChild(msg);
+    }
+    container.innerHTML = '';
+    container.appendChild(frag);
 }
 
 // Look up the git colour class for a file path. Falls back to '' (no extra
@@ -73,40 +84,54 @@ function filterTreeNodes(nodes, q) {
     if (!q) return nodes;
 
     // Pre-compute matching files from proto index.
-    // A file is included if any of its proto entries matches by ID, or if the
-    // filename itself matches. Using a Set and skipping already-added files
-    // avoids redundant smartMatch calls for large indexes.
-    const matchingFiles = new Set();
-    if (state.protoIndex) {
+    // Build a per-file IDs cache lazily (invalidated when protoIndex changes).
+    if (!state.fileProtoIds && state.protoIndex) {
+        const map = new Map();
         for (const entries of Object.values(state.protoIndex)) {
             for (const entry of entries) {
-                if (matchingFiles.has(entry.file)) continue;
-                const fname = entry.file.split('/').pop();
-                if ((entry.id && smartMatch(entry.id, q)) || smartMatch(fname, q)) {
-                    matchingFiles.add(entry.file);
-                }
+                if (!entry.file) continue;
+                let ids = map.get(entry.file);
+                if (!ids) { ids = []; map.set(entry.file, ids); }
+                if (entry.id) ids.push(entry.id.toLowerCase());
+            }
+        }
+        state.fileProtoIds = map;
+    }
+
+    // Build matchingFiles ONCE for the entire query — the inner recursive
+    // helper reuses this set so we never re-scan protoIds per directory level.
+    const matchingFiles = new Set();
+    if (state.fileProtoIds) {
+        for (const [filePath, ids] of state.fileProtoIds) {
+            const fname = filePath.split('/').pop();
+            if (smartMatch(fname, q) || ids.some(id => smartMatch(id, q))) {
+                matchingFiles.add(filePath);
             }
         }
     }
 
+    return _filterRecursive(nodes, q, matchingFiles);
+}
+
+function _filterRecursive(nodes, q, matchingFiles) {
     return nodes.map(n => {
         if (n.isDir) {
             // If the folder NAME matches, surface the whole subtree so the
             // user can browse it (instead of hiding everything inside).
-            if (smartMatch(n.name, q))
-                return n;
-            const ch = filterTreeNodes(n.children || [], q);
+            if (smartMatch(n.name, q)) return n;
+            const ch = _filterRecursive(n.children || [], q, matchingFiles);
             return ch.length ? { ...n, children: ch } : null;
         }
         // Match by file name, full relative path (allows "entities/priest"),
-        // or by prototype ID in this file. The short-circuit order ensures
-        // that the cheap n.name check runs first on every node.
+        // or by prototype ID in this file.
         return (smartMatch(n.name, q) || matchingFiles.has(n.path) || smartMatch(n.path, q)) ? n : null;
     }).filter(Boolean);
 }
 
-function buildTreeDom(nodes, parent, depth) {
+function buildTreeDom(nodes, parent, depth, budget) {
     for (const n of nodes) {
+        if (budget && budget.remaining <= 0) break;
+        if (budget) budget.remaining--;
         const el = document.createElement('div');
         const gitClass = n.isDir ? gitClassForDir(n.path) : gitClassForFile(n.path);
         el.className = `tree-item ${n.isDir ? 'tree-dir' : 'tree-file'}${gitClass}`;
@@ -141,7 +166,7 @@ function buildTreeDom(nodes, parent, depth) {
                 showContextMenu(e.clientX, e.clientY, items);
             });
             parent.appendChild(el);
-            buildTreeDom(n.children || [], childBox, depth + 1);
+            buildTreeDom(n.children || [], childBox, depth + 1, budget);
             parent.appendChild(childBox);
         } else {
             el.innerHTML = `<span class="tree-icon">${n.readOnly ? '🔒' : '📄'}</span><span class="tree-name">${esc(n.name)}</span>`;

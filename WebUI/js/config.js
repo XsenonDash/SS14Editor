@@ -7,5 +7,5 @@
 const CFG = Object.freeze({
     maxDropdownItems : 50,
     autosaveDelay    : 800,
-    searchDebounce   : 250,
+    searchDebounce   : 500,
 });

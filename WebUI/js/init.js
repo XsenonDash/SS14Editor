@@ -10,6 +10,7 @@ async function refreshAll() {
         const [tree] = await Promise.all([api.loadTree(), api.refreshIndex()]);
         state.fileTree = tree;
         state.protoIndex = await api.loadProtoIndex();
+        state.fileProtoIds = null;
         state.resolvedCache.clear(); state.protoLookup = null;
         await refreshGitStatus();
         const treeEl = document.getElementById('file-tree');
@@ -182,6 +183,7 @@ function openOtherRepository() {
     state.resolvedCache.clear(); state.protoLookup = null;
     state.fileTree   = null;
     state.protoIndex = null;
+    state.fileProtoIds = null;
     state.metadata   = null;
     state.currentFile = null;
     state.gitStatus  = null;
@@ -409,7 +411,7 @@ async function loadEditorData() {
     const results = await Promise.allSettled([
         api.loadMetadata().then(m => { state.metadata = m; console.log('[Init] Metadata loaded:', Object.keys(m.prototypes || {}).length, 'prototypes,', Object.keys(m.components || {}).length, 'components'); }),
         api.loadTree().then(t => { state.fileTree = t; console.log('[Init] File tree loaded'); }),
-        api.loadProtoIndex().then(i => { state.protoIndex = i; console.log('[Init] Proto index loaded:', Object.values(i).reduce((s, a) => s + a.length, 0), 'entries'); }),
+        api.loadProtoIndex().then(i => { state.protoIndex = i; state.fileProtoIds = null; console.log('[Init] Proto index loaded:', Object.values(i).reduce((s, a) => s + a.length, 0), 'entries'); }),
         api.gitStatus().then(g => { state.gitStatus = g; if (g && g.available) console.log('[Init] Git status loaded:', Object.keys(g.files || {}).length, 'changed files'); }).catch(() => { state.gitStatus = null; }),
     ]);
     if (!state.metadata)   state.metadata   = { prototypes: {}, components: {} };
@@ -425,6 +427,8 @@ async function loadEditorData() {
         document.getElementById('file-search').addEventListener('input', e => {
             clearTimeout(_searchTimer);
             const q = e.target.value;
+            // Show placeholder immediately so the UI feels responsive.
+            if (q) treeEl.innerHTML = '<div class="tree-searching"><span class="tree-spinner"></span>Searching\u2026</div>';
             _searchTimer = setTimeout(() => renderFileTree(state.fileTree || [], treeEl, q), CFG.searchDebounce);
         });
 

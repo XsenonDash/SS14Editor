@@ -337,6 +337,17 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 .tree-file:hover .tree-name { color: var(--text-primary); }
 .tree-children { overflow: hidden; }
 .tree-children.collapsed { display: none; }
+.tree-searching {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 12px; color: var(--text-muted); font-size: 12px; font-style: italic;
+}
+.tree-spinner {
+    width: 11px; height: 11px; flex-shrink: 0;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: setup-spin .8s linear infinite;
+}
 
 /* ======================== Main ========================== */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
