@@ -16,6 +16,21 @@ public sealed class MetadataRoot
     /// <c>!type:</c> YAML tag site. Empty list means "no implementors found".
     /// </summary>
     public Dictionary<string, List<string>> PolymorphicTypes { get; set; } = new();
+
+    /// <summary>
+    /// Maps a tag-type full name (e.g. <c>Robust.Shared.GameObjects.DrawDepth</c>)
+    /// to every named constant declared in any content enum annotated with
+    /// <c>[ConstantsFor(typeof(tag))]</c>. Used by the WebUI to render
+    /// <c>ConstantSerializer&lt;TTag&gt;</c>-serialized int fields (which
+    /// otherwise classify as plain integers) as enum-style dropdowns.
+    /// </summary>
+    public Dictionary<string, List<EnumConstantEntry>> EnumConstants { get; set; } = new();
+}
+
+public sealed class EnumConstantEntry
+{
+    public string Name { get; set; } = "";
+    public long Value { get; set; }
 }
 
 public sealed class PrototypeMetadata

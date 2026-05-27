@@ -46,7 +46,15 @@ function validateField(meta, value, source) {
     if (meta.fieldKind === 'integer') {
         const n = Number(value);
         if (!Number.isFinite(n) || !Number.isInteger(n)) {
-            issues.push({ severity: 'warning', message: `Not an integer: ${value}` });
+            // A string value is valid when it's a named constant from a
+            // [ConstantsFor] enum (e.g. "BelowMobs" for drawdepth fields).
+            const allConstants = state.metadata?.enumConstants ?? {};
+            const isNamedConstant = typeof value === 'string' &&
+                Object.values(allConstants).some(entries =>
+                    entries.some(e => e.name === value));
+            if (!isNamedConstant) {
+                issues.push({ severity: 'warning', message: `Not an integer: ${value}` });
+            }
         }
     } else if (meta.fieldKind === 'float') {
         const n = Number(value);

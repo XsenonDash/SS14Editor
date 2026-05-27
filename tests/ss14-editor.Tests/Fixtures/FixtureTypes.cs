@@ -47,6 +47,13 @@ internal sealed class FlagsForAttribute : Attribute
     public FlagsForAttribute(Type tag) { Tag = tag; }
 }
 
+[AttributeUsage(AttributeTargets.Enum, AllowMultiple = true)]
+internal sealed class ConstantsForAttribute : Attribute
+{
+    public Type Tag { get; }
+    public ConstantsForAttribute(Type tag) { Tag = tag; }
+}
+
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 internal sealed class IdDataFieldAttribute : Attribute { }
 
@@ -259,4 +266,26 @@ internal sealed class FixturePhysicsData
 
     [DataField("mask", false, 1, false, false, typeof(FlagSerializer<FixtureCollisionMask>))]
     public int CollisionMask;
+}
+
+// ---------- ConstantsFor fixture ----------
+// Mirrors the SpriteComponent.drawdepth pattern: an empty tag class +
+// one or more enums annotated with [ConstantsFor(typeof(tag))]. The
+// MetadataExtractor must surface every member of every such enum keyed
+// by the tag's FullName in MetadataRoot.EnumConstants.
+internal sealed class FixtureDrawDepthTag { }
+
+[ConstantsFor(typeof(FixtureDrawDepthTag))]
+internal enum FixtureDrawDepth
+{
+    BelowFloor = -10,
+    Default = 0,
+    Mobs = 6,
+}
+
+// Second enum reusing the same tag — values must merge into one list.
+[ConstantsFor(typeof(FixtureDrawDepthTag))]
+internal enum FixtureDrawDepthExtra
+{
+    Overlay = 100,
 }

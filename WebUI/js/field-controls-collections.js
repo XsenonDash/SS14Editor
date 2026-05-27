@@ -600,11 +600,29 @@ function dataDefCtrl(val, ddType, dis, onChange) {
         // an explicit value flips `src` to 'local' (which renders the
         // override bar + reset button), and the reset handler deletes the
         // key from the object so it falls back to the field default.
-        body.appendChild(fieldRow(f.tag, f, effective, src, nv => {
-            obj[f.tag] = nv; onChange({ ...obj });
-        }, () => {
+        const onWrite = nv => { obj[f.tag] = nv; onChange({ ...obj }); };
+        const row = fieldRow(f.tag, f, effective, src, onWrite, () => {
             delete obj[f.tag]; onChange({ ...obj });
-        }));
+        });
+        // dataDef-level override: an enclosing component handler can
+        // replace the control for a specific (dataDefType, fieldTag)
+        // pair (e.g. Sprite swaps PrototypeLayerData.state for a state
+        // picker that knows which RSI to read from the parent layer).
+        if (typeof ComponentHandlerRegistry !== 'undefined') {
+            const ovr = ComponentHandlerRegistry.currentDataDefOverride(effectiveType, f.tag);
+            if (ovr) {
+                const wrap = row.querySelector('.field-control-wrap');
+                if (wrap) {
+                    const replacement = ovr.fn(f, effective, onWrite,
+                        { ...ovr.ctx, parentObj: obj });
+                    if (replacement) {
+                        wrap.innerHTML = '';
+                        wrap.appendChild(replacement);
+                    }
+                }
+            }
+        }
+        body.appendChild(row);
     }
     for (const [k, v] of Object.entries(obj)) {
         if (k.startsWith('__')) continue;

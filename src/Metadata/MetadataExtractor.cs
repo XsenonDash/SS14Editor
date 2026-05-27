@@ -106,6 +106,12 @@ public static class MetadataExtractor
         // FlagSerializer<TTag> resolution: tag-type.FullName -> flags enum Type,
         // built during Pass 1 by scanning [FlagsFor] attributes on enum types.
         var flagTagToEnumType = new Dictionary<string, Type>();
+        // ConstantSerializer<TTag> resolution: tag-type.FullName -> aggregated
+        // list of named constants drawn from every enum annotated with
+        // [ConstantsFor(typeof(tag))]. Multiple enums can target the same tag
+        // (e.g. content forks adding extra DrawDepth bands); their members are
+        // merged. Surfaced via MetadataRoot.EnumConstants for the WebUI.
+        var enumConstants = new Dictionary<string, List<EnumConstantEntry>>();
         var skippedAssemblies = 0;
         var skippedTypes = 0;
 
@@ -124,7 +130,7 @@ public static class MetadataExtractor
                     var assembly = mlc.LoadFromAssemblyPath(dllPath);
                     DiscoverAssembly(assembly, prototypes, components, dataDefinitions,
                         polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs,
-                        flagTagToEnumType, ref skippedTypes);
+                        flagTagToEnumType, enumConstants, ref skippedTypes);
                 }
                 catch (Exception ex)
                 {
@@ -173,6 +179,7 @@ public static class MetadataExtractor
             Components = components,
             DataDefinitions = dataDefinitions,
             PolymorphicTypes = polymorphicTypes,
+            EnumConstants = enumConstants,
         };
 
         var options = new JsonSerializerOptions
@@ -256,6 +263,7 @@ public static class MetadataExtractor
         Dictionary<string, Type> compTypes,
         XmlDocReader xmlDocs,
         Dictionary<string, Type> flagTagToEnumType,
+        Dictionary<string, List<EnumConstantEntry>> enumConstants,
         ref int skippedTypes)
     {
         Type[] types;
@@ -274,7 +282,7 @@ public static class MetadataExtractor
             try
             {
                 DiscoverType(type, prototypes, components, dataDefinitions,
-                    polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs, flagTagToEnumType);
+                    polymorphicTypes, dataDefTypes, protoTypes, compTypes, xmlDocs, flagTagToEnumType, enumConstants);
             }
             catch (Exception ex)
             {
@@ -310,19 +318,44 @@ public static class MetadataExtractor
         Dictionary<string, Type> protoTypes,
         Dictionary<string, Type> compTypes,
         XmlDocReader xmlDocs,
-        Dictionary<string, Type> flagTagToEnumType)
+        Dictionary<string, Type> flagTagToEnumType,
+        Dictionary<string, List<EnumConstantEntry>> enumConstants)
     {
-        // Collect FlagsFor mapping: enables FlagSerializer<TTag> resolution in FieldExtractor.
+        // Collect FlagsFor / ConstantsFor mapping on every enum:
+        //  * FlagsFor    → FlagSerializer<TTag> resolution in FieldExtractor.
+        //  * ConstantsFor→ surfaces named ints for ConstantSerializer<TTag>
+        //                  fields (e.g. SpriteComponent.drawdepth) to the
+        //                  WebUI, which otherwise sees them as plain ints.
         if (type.IsEnum)
         {
             foreach (var a in type.CustomAttributes)
             {
-                if (a.AttributeType.Name == "FlagsForAttribute" &&
-                    a.ConstructorArguments.Count >= 1 &&
-                    a.ConstructorArguments[0].Value is Type tagType)
+                if (a.ConstructorArguments.Count < 1 ||
+                    a.ConstructorArguments[0].Value is not Type tagType)
+                    continue;
+                var tagFull = tagType.FullName ?? tagType.Name;
+                if (a.AttributeType.Name == "FlagsForAttribute")
                 {
-                    var tagFull = tagType.FullName ?? tagType.Name;
                     flagTagToEnumType.TryAdd(tagFull, type);
+                }
+                else if (a.AttributeType.Name == "ConstantsForAttribute")
+                {
+                    if (!enumConstants.TryGetValue(tagFull, out var list))
+                    {
+                        list = new List<EnumConstantEntry>();
+                        enumConstants[tagFull] = list;
+                    }
+                    var seen = new HashSet<string>(list.Select(e => e.Name));
+                    foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Static))
+                    {
+                        if (!f.IsLiteral) continue;
+                        if (!seen.Add(f.Name)) continue;
+                        long val;
+                        try { val = Convert.ToInt64(f.GetRawConstantValue()); }
+                        catch { continue; }
+                        list.Add(new EnumConstantEntry { Name = f.Name, Value = val });
+                    }
+                    list.Sort((a, b) => a.Value.CompareTo(b.Value));
                 }
             }
         }

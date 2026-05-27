@@ -166,4 +166,39 @@ public class MetadataExtractorTests
         Assert.Contains("WallLayer", maskEnumVals);
         Assert.Contains("MobLayer", maskEnumVals);
     }
+
+    /// <summary>
+    /// Verifies that <c>[ConstantsFor(typeof(TTag))]</c> enums are surfaced
+    /// under <c>MetadataRoot.EnumConstants</c> keyed by the tag type's full
+    /// name. Members from multiple enums sharing the same tag must merge
+    /// into one ascending-by-value list — this is the input the Sprite
+    /// component handler reads to render <c>drawdepth</c> as a dropdown
+    /// instead of a plain int.
+    /// </summary>
+    [Fact]
+    public void Extract_ConstantsFor_AggregatesNamedConstants()
+    {
+        using var tmp = StageFixtureAsContentServer();
+        using var doc = RunAndRead(tmp.Path);
+
+        var enums = doc.RootElement.GetProperty("enumConstants");
+
+        // Tag key is the FullName of FixtureDrawDepthTag.
+        string? tagKey = null;
+        foreach (var kv in enums.EnumerateObject())
+        {
+            if (kv.Name.EndsWith("FixtureDrawDepthTag")) { tagKey = kv.Name; break; }
+        }
+        Assert.NotNull(tagKey);
+
+        var entries = enums.GetProperty(tagKey!).EnumerateArray()
+            .Select(e => (e.GetProperty("name").GetString()!, e.GetProperty("value").GetInt64()))
+            .ToList();
+
+        // Both enums' members must appear, sorted ascending by value.
+        Assert.Equal(("BelowFloor", -10L), entries[0]);
+        Assert.Equal(("Default",      0L), entries[1]);
+        Assert.Equal(("Mobs",         6L), entries[2]);
+        Assert.Equal(("Overlay",    100L), entries[3]);
+    }
 }

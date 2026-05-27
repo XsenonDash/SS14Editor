@@ -128,6 +128,18 @@ const SpriteView = (() => {
             const dx = (size - dw) / 2;
             const dy = (size - dh) / 2;
             ctx.drawImage(_img, sx, sy, sw, sh, dx, dy, dw, dh);
+
+            // Optional per-frame color tint. Multiply blends the tint color
+            // over the sprite, then destination-in clips the result back to
+            // the original alpha mask so transparent pixels stay clear.
+            if (opts.color) {
+                ctx.globalCompositeOperation = 'multiply';
+                ctx.fillStyle = opts.color;
+                ctx.fillRect(dx, dy, dw, dh);
+                ctx.globalCompositeOperation = 'destination-in';
+                ctx.drawImage(_img, sx, sy, sw, sh, dx, dy, dw, dh);
+                ctx.globalCompositeOperation = 'source-over';
+            }
         }
 
         function tick(ts) {

@@ -45,8 +45,54 @@ function buildComponentsSection(proto, protoIdx, inherited, filePath) {
     const inhMap = new Map();
     for (const c of inhComps) { if (c && c.type && !localMap.has(c.type)) inhMap.set(c.type, c); }
 
-    for (const [ct, { data, idx }] of localMap) sec.appendChild(compCard(ct, data, false, protoIdx, idx, inherited, undefined, filePath));
-    for (const [ct, data]          of inhMap)   sec.appendChild(compCard(ct, data, true,  protoIdx, -1, inherited, undefined, filePath));
+    // Sort local components: handlers with a numeric `priority` field come
+    // first (ascending), rest follow alphabetically by type name.
+    const sortedLocal = [...localMap.entries()].sort(([aType], [bType]) => {
+        const aPri = ComponentHandlerRegistry?.get?.(aType)?.priority ?? Infinity;
+        const bPri = ComponentHandlerRegistry?.get?.(bType)?.priority ?? Infinity;
+        if (aPri !== bPri) return aPri - bPri;
+        return aType.localeCompare(bType);
+    });
+
+    sec.dataset.protoIdx = String(protoIdx);
+    sec.dataset.filePath = filePath ?? '';
+
+    // DnD drop handling: reorders local components in the YAML array.
+    sec.addEventListener('dragover', e => {
+        const target = e.target.closest('.component-card.comp-local');
+        if (!target || !target.dataset.compIdx) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        sec.querySelectorAll('.component-card').forEach(c => c.classList.remove('drop-target'));
+        target.classList.add('drop-target');
+    });
+    sec.addEventListener('dragleave', e => {
+        if (!sec.contains(e.relatedTarget)) {
+            sec.querySelectorAll('.component-card').forEach(c => c.classList.remove('drop-target'));
+        }
+    });
+    sec.addEventListener('drop', e => {
+        sec.querySelectorAll('.component-card').forEach(c => c.classList.remove('drop-target', 'dragging'));
+        const target = e.target.closest('.component-card.comp-local');
+        if (!target || !target.dataset.compIdx) return;
+        const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        const to   = parseInt(target.dataset.compIdx, 10);
+        if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+        e.preventDefault();
+        const fp = sec.dataset.filePath || state.currentFile;
+        const pi = parseInt(sec.dataset.protoIdx, 10);
+        const fs = state.openFiles.get(fp);
+        if (!fs || !fs.yaml[pi]?.components) return;
+        const comps = fs.yaml[pi].components;
+        const [moved] = comps.splice(from, 1);
+        comps.splice(to > from ? to - 1 : to, 0, moved);
+        fs.structuralChange = true;
+        fs.dirtyProtos?.add(pi); fs.dirtySinceSave?.add(pi);
+        commitChange(fs); renderEditor();
+    });
+
+    for (const [ct, { data, idx }] of sortedLocal) sec.appendChild(compCard(ct, data, false, protoIdx, idx, inherited, undefined, filePath));
+    for (const [ct, data]          of inhMap)       sec.appendChild(compCard(ct, data, true,  protoIdx, -1, inherited, undefined, filePath));
     return sec;
 }
 
@@ -138,12 +184,37 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
         && inherited.components.some(c => c && c.type === compType);
     const card = _div('component-card' + (startCollapsed ? ' collapsed' : '') + (isInh ? ' inherited' : ' comp-local'));
     card.dataset.compType = compType;
+    if (!isInh && compIdx >= 0) card.dataset.compIdx = String(compIdx);
     const cMeta = state.metadata?.components?.[compType];
     const hdr = _div('component-header');
     const compTipParts = [];
     if (cMeta?.summary) compTipParts.push(cMeta.summary);
     if (cMeta?.className) compTipParts.push(`class: ${cMeta.className}`);
-    hdr.innerHTML = `<span class="component-type" title="${esc(compTipParts.join('\n'))}">${esc(compType)}</span>`;
+    hdr.innerHTML = `<span class="comp-type-label">- type: </span><span class="component-type" title="${esc(compTipParts.join('\n'))}">${esc(compType)}</span>`;
+    // For local components prepend either a lock icon (priority/pinned) or a
+    // drag handle (regular reorderable).  The handle goes before the
+    // "- type: " label so the visual order is: [icon] - type: ComponentName.
+    if (!isInh && !ctx && compIdx >= 0) {
+        const isPriority = Number.isFinite(ComponentHandlerRegistry?.get?.(compType)?.priority);
+        if (isPriority) {
+            const lk = _div('comp-lock-handle');
+            lk.textContent = '\uD83D\uDD12';
+            lk.title = 'Priority component – always sorted first';
+            hdr.insertAdjacentElement('afterbegin', lk);
+        } else {
+            const dh = _div('comp-drag-handle');
+            dh.textContent = '⋮⋮';
+            dh.draggable = true;
+            dh.title = 'Drag to reorder';
+            dh.addEventListener('dragstart', e => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(compIdx));
+                card.classList.add('dragging');
+            });
+            dh.addEventListener('dragend', () => card.classList.remove('dragging'));
+            hdr.insertAdjacentElement('afterbegin', dh);
+        }
+    }
     // Eye-icon collapse toggle, right after the component name. The reset
     // / remove button (when present) appears AFTER the eye, matching the
     // field-row pattern "label: data [eye] [reset/delete]".
@@ -226,6 +297,21 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
         if (!isInh && compIdx >= 0) deleteField([protoIdx, 'components', compIdx], tag, filePath);
     }
 
+    // Look up a "special" handler for this component type (e.g. Sprite).
+    // Handlers now run for inherited cards too so that preview widgets
+    // (decorateHeader) are always shown. Field overrides on inherited
+    // cards are still interactive: compOnChange auto-localizes on first edit.
+    const handler = (typeof ComponentHandlerRegistry !== 'undefined')
+        ? ComponentHandlerRegistry.get(compType) : null;
+    // Merge inherited + local data so the handler sees the effective values
+    // even when fields (e.g. "sprite") live only in a parent prototype.
+    const effectiveCompData = { ...inhCompData, ...data };
+    const handlerCtx = handler ? {
+        compType, compData: effectiveCompData, protoIdx, compIdx, filePath,
+        compOnChange, compOnReset, isInh,
+    } : null;
+    if (handler) ComponentHandlerRegistry.pushContext(handler, handlerCtx);
+
     if (cMeta) {
         for (const f of cMeta.fields) {
             renderedTags.add(f.tag);
@@ -249,6 +335,21 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
             const cBefore = isInh ? null : buildComponentFieldCommentBefore(filePath, protoIdx, compIdx, f.tag);
             if (cBefore) body.appendChild(cBefore);
             const cRow = fieldRow(f.tag, f, value, source, nv => compOnChange(f.tag, nv), onReset);
+            // Per-field override: handler returns a replacement HTMLElement
+            // that takes over the .field-control-wrap slot. We pass the
+            // current value plus a write-through callback so the handler
+            // doesn't need to know whether the component is localized yet.
+            const override = handler?.fieldOverrides?.[f.tag];
+            if (override) {
+                const wrap = cRow.querySelector('.field-control-wrap');
+                if (wrap) {
+                    const replacement = override(f, value, nv => compOnChange(f.tag, nv), handlerCtx);
+                    if (replacement) {
+                        wrap.innerHTML = '';
+                        wrap.appendChild(replacement);
+                    }
+                }
+            }
             body.appendChild(cRow);
             if (!isInh) {
                 attachComponentFieldComment(cRow, filePath, protoIdx, compIdx, f.tag);
@@ -279,6 +380,17 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
     }
 
     card.appendChild(body);
+
+    // Handler hook: decorate the card AFTER body is populated, so the
+    // handler can read field elements (e.g. to attach change listeners)
+    // and prepend preview widgets above the body. We then pop the render
+    // stack frame; nested dataDefCtrl calls finished resolving before
+    // this point.
+    if (handler) {
+        try { handler.decorateHeader?.(card, hdr, effectiveCompData, cMeta, handlerCtx); }
+        catch (e) { console.error('[component handler]', compType, e); }
+        ComponentHandlerRegistry.popContext();
+    }
     return card;
 }
 

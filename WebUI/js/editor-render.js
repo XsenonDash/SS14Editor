@@ -79,9 +79,33 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                     }
                 }
                 try {
+                    // Preserve the proto-card, component-card, AND
+                    // datadef-inline collapse states so editing one field
+                    // doesn't visually collapse unrelated sections.
                     const wasCollapsed = existingCard.classList.contains('collapsed');
+                    const compCollapse = {};
+                    existingCard.querySelectorAll('.component-card').forEach(comp => {
+                        const ct = comp.querySelector('.component-type')?.textContent || '';
+                        if (ct) compCollapse[ct] = comp.classList.contains('collapsed');
+                    });
+                    // Save datadef-inline states by DOM position (stable for
+                    // simple field edits that don't add/remove nested items).
+                    const datadefCollapse = [];
+                    existingCard.querySelectorAll('.datadef-inline').forEach(dd => {
+                        datadefCollapse.push(dd.classList.contains('collapsed'));
+                    });
                     const newCard = buildCard(ep, pendingIdx, filePath);
                     if (wasCollapsed) newCard.classList.add('collapsed');
+                    newCard.querySelectorAll('.component-card').forEach(comp => {
+                        const ct = comp.querySelector('.component-type')?.textContent || '';
+                        if (ct && compCollapse[ct] !== undefined) {
+                            comp.classList.toggle('collapsed', compCollapse[ct]);
+                        }
+                    });
+                    const newDDs = newCard.querySelectorAll('.datadef-inline');
+                    datadefCollapse.forEach((c, i) => {
+                        if (newDDs[i]) newDDs[i].classList.toggle('collapsed', c);
+                    });
                     area.replaceChild(newCard, existingCard);
                     return;
                 } catch (e) {

@@ -1,5 +1,11 @@
 # Changelogs
 
+## v1.1.13
+- Added a custom `SpriteComponent` handler to handle paths to RSI folders, sprite states, and sprite previews.
+- Fixed a bug that caused data objects to collapse automatically when structural changes were made to the prototype.
+- `SpriteComponent` is now always the topmost layer and remains visible even when minimized.
+- Added the ability to swap components using drag and drop
+
 ## v1.1.12
 - Hovering over a component now displays the XML summary from the code.
 - Dictionary entries can now be edited after they have been created.
