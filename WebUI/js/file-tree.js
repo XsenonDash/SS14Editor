@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – File Tree
+//  SS14 Editor – File Tree
 // ======================================================================
 
 'use strict';
@@ -135,6 +135,7 @@ function buildTreeDom(nodes, parent, depth, budget) {
         const el = document.createElement('div');
         const gitClass = n.isDir ? gitClassForDir(n.path) : gitClassForFile(n.path);
         el.className = `tree-item ${n.isDir ? 'tree-dir' : 'tree-file'}${gitClass}`;
+        el.dataset.path = n.path;
         el.style.paddingLeft = `${12 + depth * 16}px`;
         if (n.isDir) {
             const expanded = state.expandedDirs?.has(n.path);
@@ -325,3 +326,45 @@ async function promptDeleteFolder(path) {
         }
     }
 }
+
+// ======================== REVEAL IN TREE ================================
+
+function updateRevealBtn() {
+    const btn = document.getElementById('reveal-in-tree-btn');
+    if (!btn) return;
+    const group = state.groups?.find(g => g.id === state.activeGroupId);
+    const path = group?.activeTab;
+    const isYaml = !!path && (path.endsWith('.yml') || path.endsWith('.yaml'));
+    btn.disabled = !isYaml;
+}
+
+function revealActiveFile() {
+    const group = state.groups?.find(g => g.id === state.activeGroupId);
+    const path = group?.activeTab;
+    if (!path || (!path.endsWith('.yml') && !path.endsWith('.yaml'))) return;
+
+    // Expand all ancestor directories.
+    const parts = path.split('/');
+    for (let i = 1; i < parts.length; i++)
+        state.expandedDirs.add(parts.slice(0, i).join('/'));
+
+    // Re-render the file tree without clearing the search filter.
+    const treeEl = document.getElementById('file-tree');
+    if (treeEl && state.fileTree) {
+        const q = document.getElementById('file-search').value;
+        renderFileTree(state.fileTree, treeEl, q);
+    }
+
+    // Find the item and flash it.
+    requestAnimationFrame(() => {
+        const el = treeEl?.querySelector(`.tree-file[data-path="${CSS.escape(path)}"]`);
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('tree-item-flash');
+        void el.offsetWidth; // force reflow so re-adding the class re-triggers the animation
+        el.classList.add('tree-item-flash');
+        el.addEventListener('animationend', () => el.classList.remove('tree-item-flash'), { once: true });
+    });
+}
+
+document.getElementById('reveal-in-tree-btn')?.addEventListener('click', revealActiveFile);

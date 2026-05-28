@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Add / Copy Prototype modal
+//  SS14 Editor – Add / Copy Prototype modal
 // ======================================================================
 //  The "+ Add Prototype" workflow: pick type → empty vs copy → (if copy)
 //  pick source. Also exposes addNewPrototype / copyPrototype helpers.

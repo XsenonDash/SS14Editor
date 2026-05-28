@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Render & Collapse
+//  SS14 Editor – Render & Collapse
 // ======================================================================
 //  Re-renders the right pane, restores focus/scroll/collapse state after
 //  rebuilds, and owns the proto-card collapse toggle widget.
@@ -30,7 +30,7 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
     if (!area) return;
     if (!filePath) {
         area.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div>
-            <h2>SS14 Prototype Editor</h2>
+            <h2>SS14 Editor</h2>
             <p>Open a YAML file from the sidebar to start editing prototypes visually.</p>
             <p class="hint">Ctrl+S — force save</p></div>`;
         return;
@@ -95,7 +95,7 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                         datadefCollapse.push(dd.classList.contains('collapsed'));
                     });
                     const newCard = buildCard(ep, pendingIdx, filePath);
-                    if (wasCollapsed) newCard.classList.add('collapsed');
+                    newCard.classList.toggle('collapsed', wasCollapsed);
                     newCard.querySelectorAll('.component-card').forEach(comp => {
                         const ct = comp.querySelector('.component-type')?.textContent || '';
                         if (ct && compCollapse[ct] !== undefined) {
@@ -251,22 +251,33 @@ function saveCollapseState(area) {
 }
 
 function restoreCollapseState(area, saved) {
+    // hasHistory is true only when the saved snapshot actually contains proto
+    // IDs that appear in the *current* render.  This prevents a stale snapshot
+    // from the previous file (different IDs) from expanding every card in the
+    // newly opened file.  When there IS overlap (same file, possible additions),
+    // items absent from the snapshot are treated as newly created → expand them.
+    const hasHistory = [...area.querySelectorAll('.proto-card')].some(card => {
+        const pid = card.dataset.protoId || card.querySelector('.proto-id-text')?.textContent || '';
+        return pid && saved.protos[pid] !== undefined;
+    });
     area.querySelectorAll('.proto-card').forEach(card => {
         const pid = card.dataset.protoId || card.querySelector('.proto-id-text')?.textContent || '';
         if (!pid) return;
         if (saved.protos[pid] !== undefined) {
             card.classList.toggle('collapsed', saved.protos[pid]);
+        } else if (hasHistory) {
+            card.classList.remove('collapsed');
         }
         const cm = saved.comps[pid];
-        if (cm) {
-            card.querySelectorAll('.component-card').forEach(comp => {
-                const ct = comp.querySelector('.component-type')?.textContent || '';
-                if (!ct) return;
-                if (cm[ct] !== undefined) {
-                    comp.classList.toggle('collapsed', cm[ct]);
-                }
-            });
-        }
+        card.querySelectorAll('.component-card').forEach(comp => {
+            const ct = comp.querySelector('.component-type')?.textContent || '';
+            if (!ct) return;
+            if (cm?.[ct] !== undefined) {
+                comp.classList.toggle('collapsed', cm[ct]);
+            } else if (hasHistory) {
+                comp.classList.remove('collapsed');
+            }
+        });
     });
 }
 

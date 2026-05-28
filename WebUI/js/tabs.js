@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – Tabs & Editor Groups
+//  SS14 Editor – Tabs & Editor Groups
 // ======================================================================
 //
 //  Architecture: multiple editor groups arranged side-by-side (VS Code
@@ -125,6 +125,7 @@ function renderTabs() {
         }, { passive: false });
         groupEl.replaceChild(newTabBar, oldTabBar);
     });
+    updateRevealBtn?.();
 }
 
 // ======================== GROUP / TAB ELEMENT FACTORIES ================

@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Mutation, Autosave, Undo/Redo
+//  SS14 Editor – Mutation, Autosave, Undo/Redo
 // ======================================================================
 //  setFieldValue / deleteField are the single chokepoints every editor
 //  mutation routes through, so collapse-state preservation, dirty-flag

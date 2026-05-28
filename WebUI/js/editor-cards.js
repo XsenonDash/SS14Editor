@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Proto Card
+//  SS14 Editor – Proto Card
 // ======================================================================
 //  buildCard() renders one prototype-card (header, drag-drop reorder,
 //  id/abstract/parent rows, metadata-driven fields, custom fields,
@@ -95,7 +95,7 @@ function buildCard(proto, idx, filePath) {
                 }
             }},
         ];
-        if (meta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(meta.className) });
+        if (meta?.className) items.push({ label: `Open .cs source of "${meta.className.split('.').pop()}"`, action: () => api.openSource(meta.className) });
         items.push('---', { label: 'Delete prototype', danger: true, action: () => hdr.querySelector('.delete-proto-btn').click() });
         showContextMenu(e.clientX, e.clientY, items);
     });

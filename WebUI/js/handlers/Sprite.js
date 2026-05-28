@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Sprite component handler
+//  SS14 Editor – Sprite component handler
 // ======================================================================
 //  Three layers of customisation on top of the generic component card:
 //

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SS14 Prototype Editor</title>
+    <title>SS14 Editor</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -69,7 +69,15 @@
         <aside id="sidebar">
             <!-- Files panel (first and currently only side panel) -->
             <div id="panel-files" class="side-panel active">
-                <div class="panel-header">Explorer</div>
+                <div class="panel-header">
+                    Explorer
+                    <button id="reveal-in-tree-btn" class="panel-header-btn" title="Reveal active file in tree" disabled>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/>
+                            <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                    </button>
+                </div>
                 <div class="sidebar-search">
                     <input type="text" id="file-search" placeholder="Search files & prototype IDs…" spellcheck="false">
                 </div>
@@ -95,7 +103,7 @@
     <div id="setup-overlay" class="setup-overlay" style="display:none">
         <div class="setup-card">
             <img class="setup-logo" src="img/icon.png" alt="" draggable="false">
-            <h1 class="setup-title">SS14 Prototype Editor</h1>
+            <h1 class="setup-title">SS14 Editor</h1>
             <p class="setup-desc">Enter the path to your SS14 project folder to begin.<br>
                 The project must be built first — run <code>dotnet build</code> in it.</p>
             <div class="setup-input-row">

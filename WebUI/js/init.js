@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – Initialization & Keyboard Shortcuts
+//  SS14 Editor – Initialization & Keyboard Shortcuts
 // ======================================================================
 
 'use strict';

@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – Collection & DataDefinition Editors
+//  SS14 Editor – Collection & DataDefinition Editors
 // ======================================================================
 //  listCtrl / mapCtrl / dataDefCtrl extracted from fields.js.
 //  Depends on globals from fields.js: elementControl, defaultForKind,
@@ -226,12 +226,16 @@ function listCtrl(val, meta, dis, onChange) {
                             arr.push({ __yamlTag: fullName.split('.').pop() });
                         }
                         onChange([...arr]); rebuild();
+                        const dds = w.querySelectorAll('.datadef-inline');
+                        if (dds.length > 0) dds[dds.length - 1].classList.remove('collapsed');
                     }, false);
                     return;
                 }
                 const next = isDD ? {} : defaultForKind(meta.element?.kind);
                 arr.push(next);
                 onChange([...arr]); rebuild();
+                const dds = w.querySelectorAll('.datadef-inline');
+                if (dds.length > 0) dds[dds.length - 1].classList.remove('collapsed');
             });
             addRow.appendChild(addBtn);
             w.appendChild(addRow);
@@ -418,6 +422,8 @@ function mapCtrl(val, meta, dis, onChange) {
                         obj[k] = { __yamlTag: fullName.split('.').pop() };
                         pendingKey = '';
                         onChange({ ...obj }); rebuild();
+                        const dds = w.querySelectorAll('.datadef-inline');
+                        if (dds.length > 0) dds[dds.length - 1].classList.remove('collapsed');
                     }, false);
                     return;
                 }
@@ -425,6 +431,8 @@ function mapCtrl(val, meta, dis, onChange) {
                 obj[k] = next;
                 pendingKey = '';
                 onChange({ ...obj }); rebuild();
+                const dds = w.querySelectorAll('.datadef-inline');
+                if (dds.length > 0) dds[dds.length - 1].classList.remove('collapsed');
             });
             addRow.append(keyHost, addBtn);
             w.appendChild(addRow);

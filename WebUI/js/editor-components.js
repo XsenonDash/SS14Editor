@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Components Section
+//  SS14 Editor – Components Section
 // ======================================================================
 //  Per-prototype components: block, the add-component modal,
 //  individual compCard widgets, and component localization (copying an
@@ -142,6 +142,8 @@ function pickComponentType(excludeSet, onPick) {
         for (const t of filtered.slice(0, 100)) {
             const el = _div('modal-list-item');
             el.textContent = t;
+            const summary = state.metadata?.components?.[t]?.summary;
+            if (summary) el.title = summary;
             el.addEventListener('click', () => { overlay.remove(); onPick(t); });
             listEl.appendChild(el);
         }
@@ -245,7 +247,7 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
     hdr.addEventListener('contextmenu', e => {
         e.preventDefault(); e.stopPropagation();
         const items = [];
-        if (cMeta?.className) items.push({ label: 'Open .cs source', action: () => api.openSource(cMeta.className) });
+        if (cMeta?.className) items.push({ label: `Open .cs source of "${cMeta.className.split('.').pop()}"`, action: () => api.openSource(cMeta.className) });
         if (!isInh && compIdx >= 0) {
             items.push('---', { label: isOverride ? 'Reset to inherited' : 'Remove component', danger: !isOverride, action: () => {
                 if (ctx) { ctx.remove(); return; }

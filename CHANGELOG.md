@@ -2,12 +2,17 @@
 
 ## v1.1.14
 - Searching by components, prototypes, and other data types is now more convenient.
+- The drop-down list for searching by components now includes tooltips describing what each component does, extracted from the XML summary.
+- Fixed a bug that caused sprite animation previews to play at breakneck speed after the app was minimized.
+- Newly created data objects (prototypes, components, DataDefinitions) are automatically expanded and display all their fields upon creation.
+- An `Eye` button has been added to quickly locate the open YML file in the file browser.
+- Fixed a bug that caused long blocks of comments to overlap with data interface blocks.
 
 ## v1.1.13
 - Added a custom `SpriteComponent` handler to handle paths to RSI folders, sprite states, and sprite previews.
 - Fixed a bug that caused data objects to collapse automatically when structural changes were made to the prototype.
 - `SpriteComponent` is now always the topmost layer and remains visible even when minimized.
-- Added the ability to swap components using drag and drop
+- Added the ability to swap components using drag and drop.
 
 ## v1.1.12
 - Hovering over a component now displays the XML summary from the code.

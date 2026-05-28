@@ -53,7 +53,7 @@ public static class Program
 
     private static void PrintUsage()
     {
-        Console.WriteLine("SS14 Prototype Editor");
+        Console.WriteLine("SS14 Editor");
         Console.WriteLine();
         Console.WriteLine("Usage:");
         Console.WriteLine("  ss14-editor extract [solutionRoot]  - Extract prototype metadata to Editor/metadata.json");

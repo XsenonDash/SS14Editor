@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – Component Handler Registry
+//  SS14 Editor – Component Handler Registry
 // ======================================================================
 //  Generic extension point for "special" component-type renderers. A
 //  handler is a plain object with any subset of these hooks:

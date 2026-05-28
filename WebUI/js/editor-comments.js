@@ -1,5 +1,5 @@
 // ======================================================================
-//  SS14 Prototype Editor – YAML Comment Visualization & Editing
+//  SS14 Editor – YAML Comment Visualization & Editing
 // ======================================================================
 //  Unified architecture: every comment surface (inline-on-field, before-field,
 //  between-protos, trailing-file, future deep collection items) is rendered
@@ -43,6 +43,7 @@ function _renderCommentLines(text) {
         const txt = _el('span');
         txt.className = 'yaml-comment-text';
         txt.textContent = ' ' + line;
+        txt.title = line;
         lineEl.appendChild(hash);
         lineEl.appendChild(txt);
         wrap.appendChild(lineEl);

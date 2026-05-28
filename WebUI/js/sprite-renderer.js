@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – RSI Sprite Renderer (reusable)
+//  SS14 Editor – RSI Sprite Renderer (reusable)
 // ======================================================================
 
 'use strict';
@@ -106,6 +106,11 @@ const SpriteView = (() => {
         let _elapsed = 0;
         let _lastTime = 0;
 
+        function _onVisibilityChange() {
+            if (!document.hidden) _lastTime = 0;
+        }
+        document.addEventListener('visibilitychange', _onVisibilityChange);
+
         function draw() {
             ctx.clearRect(0, 0, size, size);
             if (!_img || !_meta || !_state) return;
@@ -195,6 +200,7 @@ const SpriteView = (() => {
             destroy() {
                 _alive = false;
                 cancelAnimationFrame(_raf);
+                document.removeEventListener('visibilitychange', _onVisibilityChange);
                 canvas.remove();
             },
         };

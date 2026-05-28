@@ -1,5 +1,5 @@
 ﻿/* ====================================================================== */
-/*  SS14 Prototype Editor – Discord-inspired Dark Theme                 */
+/*  SS14 Editor – Discord-inspired Dark Theme                 */
 /* ====================================================================== */
 
 :root {
@@ -294,7 +294,17 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     color: var(--text-muted);
     border-bottom: 1px solid var(--border-subtle);
     flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between;
 }
+.panel-header-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--text-muted); padding: 2px 4px;
+    border-radius: var(--radius-sm);
+    display: flex; align-items: center;
+    opacity: 0.6; transition: opacity .15s, color .15s;
+}
+.panel-header-btn:hover:not(:disabled) { opacity: 1; color: var(--accent); }
+.panel-header-btn:disabled { opacity: 0.25; cursor: default; }
 
 /* ======================== Sidebar Resizer ================ */
 #sidebar-resizer {
@@ -991,7 +1001,8 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);
 }
 .list-item:hover, .map-entry:hover { border-color: var(--border); }
-.list-item-content, .map-entry-content { flex: 1; min-width: 0; }
+.list-item-content { flex: 1; min-width: 0; }
+.map-entry-content { flex: 0 0 auto; min-width: 0; }
 .map-key-label {
     font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary);
     min-width: 80px; padding-top: 5px; word-break: break-all;
@@ -1110,12 +1121,22 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 .yaml-comment-line { display: flex; align-items: baseline; }
 .yaml-comment-hash { color: var(--comment); font-weight: 700; flex-shrink: 0; }
 .yaml-comment-text { color: var(--comment); white-space: pre-wrap; word-break: break-word; }
+/* In inline field comments, truncate long text instead of overflowing into
+   adjacent UI. Standalone .yaml-comment-block blocks are left to wrap naturally.
+   The comment-host is normally inline-flex; we keep it that way but give it a
+   hard max-width so it can never push past its neighbours, then propagate
+   overflow:hidden + width constraints down the chain so text-overflow fires. */
+.field-inline-comment.yaml-comment-host { display: inline-flex; max-width: min(220px, 60%); overflow: hidden; }
+.field-inline-comment .yaml-comment-view { width: 100%; min-width: 0; overflow: hidden; flex-direction: row; flex-wrap: nowrap; }
+.field-inline-comment .yaml-comment-line { width: 100%; min-width: 0; overflow: hidden; flex-shrink: 1; }
+.field-inline-comment .yaml-comment-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* Trailing inline comment rendered inside the field row */
 .field-inline-comment {
     margin-left: 6px;
     flex-shrink: 1;
     min-width: 0;
+    overflow: hidden;
     min-height: 22px;
     align-self: center;
     align-items: center;
@@ -1125,7 +1146,6 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     transition: background .15s;
 }
 .field-inline-comment:hover { background: var(--bg-surface-hover); }
-.field-inline-comment .yaml-comment-view { flex-direction: row; flex-wrap: wrap; }
 
 /* Chat-bubble (add-comment) and × delete-comment buttons — square,
    borderless-by-default, hover-revealed. On own hover: green outline +
@@ -1966,6 +1986,7 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     align-self: center;
 }
 .map-entry--block .map-entry-content {
+    flex: 1;
     padding-left: var(--yaml-indent);
 }
 
@@ -2043,6 +2064,15 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 }
 .proto-card.proto-card-flash {
     animation: proto-card-flash 1.4s ease-out 1;
+}
+
+/* Flash a tree file item when revealed via the "Reveal in tree" button. */
+@keyframes tree-item-flash {
+    0%   { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+    100% { background: transparent; }
+}
+.tree-item.tree-item-flash {
+    animation: tree-item-flash 1.4s ease-out 1;
 }
 
 /* ── 7.  Components section → YAML "components:" key + indent ──────── */

@@ -32,3 +32,5 @@ if not exist "electron\node_modules" (
 echo [launch] Starting SS14 Editor desktop app...
 cd electron
 npm start
+if %ERRORLEVEL% neq 0 ( echo [launch] npm start failed with error %ERRORLEVEL%. )
+pause

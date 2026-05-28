@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – Inheritance Resolution
+//  SS14 Editor – Inheritance Resolution
 // ======================================================================
 
 'use strict';

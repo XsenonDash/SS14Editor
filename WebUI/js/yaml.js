@@ -1,5 +1,5 @@
 ﻿// ======================================================================
-//  SS14 Prototype Editor – YAML helpers (eemeli/yaml v2)
+//  SS14 Editor – YAML helpers (eemeli/yaml v2)
 // ======================================================================
 
 'use strict';
@@ -45,6 +45,7 @@ function _jsToNode(val, doc) {
     }
     if (Array.isArray(val)) {
         const seq = doc.createNode([]);
+        seq.flow = false;
         seq.items = val.map(item => _jsToNode(item, doc));
         return seq;
     }
@@ -253,7 +254,20 @@ function dumpYamlRespectful(yamlArray, doc, originalText, dirtyIndices) {
  * inter-proto gap already emitted by dumpYamlRespectful via text-slicing,
  * so we suppress them here to avoid duplication.
  */
+function _forceBlockStyle(node) {
+    if (!node || typeof node !== 'object') return;
+    if (YAML.isSeq(node) || YAML.isMap(node)) node.flow = false;
+    if (YAML.isSeq(node)) {
+        for (const item of node.items) _forceBlockStyle(item);
+    } else if (YAML.isMap(node)) {
+        for (const pair of node.items) {
+            if (YAML.isPair(pair)) _forceBlockStyle(pair.value);
+        }
+    }
+}
+
 function _dumpSingleProtoFromNode(node) {
+    _forceBlockStyle(node);
     const origSpace   = node.spaceBefore;
     const origComment = node.commentBefore;
     node.spaceBefore   = false;
