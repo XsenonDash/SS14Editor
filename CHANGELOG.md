@@ -1,5 +1,8 @@
 # Changelogs
 
+## v1.1.14
+- Searching by components, prototypes, and other data types is now more convenient.
+
 ## v1.1.13
 - Added a custom `SpriteComponent` handler to handle paths to RSI folders, sprite states, and sprite previews.
 - Fixed a bug that caused data objects to collapse automatically when structural changes were made to the prototype.

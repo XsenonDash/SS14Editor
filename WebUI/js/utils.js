@@ -68,14 +68,13 @@ function prettyTypeName(input) {
 }
 
 // ======================== SMART SEARCH =================================
-// Subsequence match: letters of `pattern` must appear in `text` in order
-// but not necessarily contiguously. Whitespace in `query` splits it into
-// independent tokens that may match in any order. Empty query matches
-// everything.
+// Substring match: each whitespace-separated token in `query` must appear
+// as a contiguous substring of `text` (case-insensitive). Tokens may match
+// in any order. Empty query matches everything.
 //
 // Examples:
 //   smartMatch('CEStaminaThrowable', 'throw stam') === true
-//   smartMatch('CEStaminaThrowable', 'stmth')      === true
+//   smartMatch('CEStaminaThrowable', 'stmth')      === false
 //   smartMatch('CEStaminaThrowable', 'xyz')        === false
 //
 // This is the single search predicate used by every dropdown, picker,
@@ -87,16 +86,7 @@ function smartMatch(text, query) {
     const q = String(query).toLowerCase().trim();
     if (!q) return true;
     const tokens = q.split(/\s+/);
-    return tokens.every(tok => _isSubsequence(hay, tok));
-}
-
-function _isSubsequence(hay, needle) {
-    if (!needle) return true;
-    let i = 0;
-    for (let h = 0; h < hay.length && i < needle.length; h++) {
-        if (hay[h] === needle[i]) i++;
-    }
-    return i === needle.length;
+    return tokens.every(tok => tok === '' || hay.includes(tok));
 }
 
 // ======================== TOAST ========================================
