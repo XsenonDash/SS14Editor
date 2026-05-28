@@ -1,5 +1,8 @@
 # Changelogs
 
+## v1.1.15
+- Added support for `Ctrl+Z` and `Ctrl+Y` for version control.
+
 ## v1.1.14
 - Searching by components, prototypes, and other data types is now more convenient.
 - The drop-down list for searching by components now includes tooltips describing what each component does, extracted from the XML summary.

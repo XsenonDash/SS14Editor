@@ -61,13 +61,24 @@ document.addEventListener('keydown', e => {
         if (fs) {
             clearTimeout(fs._saveTimer);
             api.saveFile(fs.path, fs.content).then(async () => {
-                fs.modified = false; renderTabs(); toast('Saved', 'success');
+                fs.modified = false; renderTabs();
                 scheduleGitRefresh(100);
             }).catch(e => {
                 console.error('[Keyboard] Manual save failed:', e);
                 toast(`Save error: ${e.message}`, 'error');
             });
         }
+    }
+
+    // Undo/Redo — always intercept at file level. This editor commits field
+    // values atomically (not per-character), so file-level undo is more
+    // meaningful than native per-character undo inside an input.
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+        e.preventDefault();
+        undoFile();
+    } else if (e.ctrlKey && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+        e.preventDefault();
+        redoFile();
     }
 });
 
@@ -127,7 +138,6 @@ function startFileEventStream() {
                 return;
             }
             if (fs.modified) {
-                toast(`${path.split('/').pop()} changed externally (local edits kept)`, 'warning');
                 return;
             }
             try {

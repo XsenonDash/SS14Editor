@@ -49,6 +49,27 @@ function deleteField(path, tag, filePath) {
 
 
 function commitChange(fs) {
+    // ── Undo snapshot ──────────────────────────────────────────────────
+    // Push current content before overwriting it, but group rapid edits
+    // to the same proto (e.g. typing into a text field) into one snapshot.
+    if (fs.content) {
+        const now = Date.now();
+        // Direct callers (editor-cards, editor-components, etc.) don't set
+        // _pendingEditIdx, so treat it as -1 (structural / multi-proto change).
+        const protoIdx = fs._pendingEditIdx ?? -1;
+        const shouldSnapshot =
+            fs._undoStack.length === 0 ||
+            protoIdx !== fs._lastSnapshotProtoIdx ||
+            now - fs._lastSnapshotTime > 1000;
+        if (shouldSnapshot) {
+            fs._undoStack.push(fs.content);
+            if (fs._undoStack.length > 100) fs._undoStack.shift();
+            fs._redoStack = [];
+            fs._lastSnapshotTime = now;
+            fs._lastSnapshotProtoIdx = protoIdx;
+        }
+    }
+    // ───────────────────────────────────────────────────────────────────
     let nc;
     if (fs.doc && fs.dirtyProtos?.size > 0 &&
         fs.yaml.length === fs.doc.contents?.items?.length) {
@@ -65,6 +86,45 @@ function commitChange(fs) {
     fs.content = nc; fs.modified = true;
     relinkProtoAst(fs);
     renderTabs(); scheduleAutosave(fs);
+}
+
+// ======================== UNDO / REDO ==================================
+
+function applySnapshot(fs, content) {
+    fs.content = content;
+    const { protos, doc } = parseYamlDoc(content);
+    fs.yaml = protos;
+    fs.doc = doc;
+    fs.dirtyProtos = new Set();
+    fs.dirtySinceSave = new Set();
+    fs.structuralChange = false;
+    fs._pendingEditIdx = undefined;
+    // Force next commitChange to snapshot immediately (the restored state).
+    fs._lastSnapshotTime = 0;
+    fs._lastSnapshotProtoIdx = undefined;
+    fs.modified = true;
+    relinkProtoAst(fs);
+    state.resolvedCache.clear();
+    state.protoLookup = null;
+    renderTabs();
+    scheduleRenderEditor();
+    scheduleAutosave(fs);
+}
+
+function undoFile() {
+    const fs = state.openFiles.get(state.currentFile);
+    if (!fs || fs.readOnly || fs._undoStack.length === 0) return;
+    fs._redoStack.push(fs.content);
+    if (fs._redoStack.length > 100) fs._redoStack.shift();
+    applySnapshot(fs, fs._undoStack.pop());
+}
+
+function redoFile() {
+    const fs = state.openFiles.get(state.currentFile);
+    if (!fs || fs.readOnly || fs._redoStack.length === 0) return;
+    fs._undoStack.push(fs.content);
+    if (fs._undoStack.length > 100) fs._undoStack.shift();
+    applySnapshot(fs, fs._redoStack.pop());
 }
 
 // ======================== AUTOSAVE =====================================
@@ -106,7 +166,7 @@ function scheduleAutosave(fs) {
             }
             fs.dirtySinceSave.clear();
             fs.structuralChange = false;
-            fs.modified = false; renderTabs(); toast('Saved', 'success');
+            fs.modified = false; renderTabs();
             // Refresh git decorations so the tree + tabs colour the file as
             // modified. The Ctrl+S handler does the same — autosave used to
             // skip it, leaving the tree stale until the next SSE event.

@@ -94,6 +94,12 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                     existingCard.querySelectorAll('.datadef-inline').forEach(dd => {
                         datadefCollapse.push(dd.classList.contains('collapsed'));
                     });
+                    // Persist to FileState so undo/redo can't reset collapse state.
+                    const cardProtoId = existingCard.dataset.protoId || existingCard.querySelector('.proto-id-text')?.textContent || '';
+                    if (cardProtoId && fs._collapseState) {
+                        fs._collapseState.protos[cardProtoId] = wasCollapsed;
+                        fs._collapseState.comps[cardProtoId] = { ...compCollapse };
+                    }
                     const newCard = buildCard(ep, pendingIdx, filePath);
                     newCard.classList.toggle('collapsed', wasCollapsed);
                     newCard.querySelectorAll('.component-card').forEach(comp => {
@@ -118,8 +124,11 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
         // ── Full rebuild ────────────────────────────────────────────────────
         state.resolvedCache.clear(); state.protoLookup = null;
 
-        // Save collapse state, scroll position, and focused field before re-render.
-        const collapseState = saveCollapseState(area);
+        // Save collapse state (merges DOM into fs._collapseState for persistence),
+        // then use fs._collapseState as the authoritative source for restore.
+        // This keeps collapse state stable across undo/redo.
+        saveCollapseState(area, fs);
+        const collapseState = fs._collapseState;
         const savedScroll = area.scrollTop;
         // Track the focused input/select so we can restore focus after rebuild.
         const focusedEl = document.activeElement;
@@ -226,6 +235,23 @@ function buildCollapseBtn(getCard) {
         btn.title = card.classList.contains('collapsed')
             ? 'Show all fields'
             : 'Show only overridden fields';
+        // Persist the new state to FileState so undo/redo can't reset it.
+        const protoCard = card.classList.contains('proto-card') ? card : card.closest('.proto-card');
+        if (protoCard) {
+            const pid = protoCard.dataset.protoId || protoCard.querySelector('.proto-id-text')?.textContent || '';
+            const fs = state.openFiles.get(state.currentFile);
+            if (pid && fs?._collapseState) {
+                if (card === protoCard) {
+                    fs._collapseState.protos[pid] = card.classList.contains('collapsed');
+                } else {
+                    const ct = card.querySelector('.component-type')?.textContent || '';
+                    if (ct) {
+                        if (!fs._collapseState.comps[pid]) fs._collapseState.comps[pid] = {};
+                        fs._collapseState.comps[pid][ct] = card.classList.contains('collapsed');
+                    }
+                }
+            }
+        }
     });
     return btn;
 }
@@ -234,20 +260,27 @@ function buildCollapseBtn(getCard) {
 // Collapse state is keyed by *prototype id* and *component type*, not by
 // index — adding / removing / reordering a component must not bleed the
 // expanded/collapsed flag onto an unrelated card.
-function saveCollapseState(area) {
-    const state = { protos: {}, comps: {} };
+// Reads current collapse state from the DOM and merges it into the
+// FileState._collapseState for persistent storage. When fs is provided the
+// result is also written into fs._collapseState so it survives undo/redo.
+function saveCollapseState(area, fs) {
+    const saved = { protos: {}, comps: {} };
     area.querySelectorAll('.proto-card').forEach(card => {
         const pid = card.dataset.protoId || card.querySelector('.proto-id-text')?.textContent || '';
         if (!pid) return;
-        state.protos[pid] = card.classList.contains('collapsed');
-        state.comps[pid] = {};
+        saved.protos[pid] = card.classList.contains('collapsed');
+        saved.comps[pid] = {};
         card.querySelectorAll('.component-card').forEach(comp => {
             const ct = comp.querySelector('.component-type')?.textContent || '';
             if (!ct) return;
-            state.comps[pid][ct] = comp.classList.contains('collapsed');
+            saved.comps[pid][ct] = comp.classList.contains('collapsed');
         });
     });
-    return state;
+    if (fs) {
+        Object.assign(fs._collapseState.protos, saved.protos);
+        Object.assign(fs._collapseState.comps, saved.comps);
+    }
+    return saved;
 }
 
 function restoreCollapseState(area, saved) {
@@ -285,6 +318,13 @@ function collapseAllProtos(collapse) {
     document.querySelectorAll('.group-content .proto-card').forEach(card => {
         card.classList.toggle('collapsed', collapse);
     });
+    const fs = state.openFiles.get(state.currentFile);
+    if (fs?._collapseState) {
+        document.querySelectorAll('.group-content .proto-card').forEach(card => {
+            const pid = card.dataset.protoId || card.querySelector('.proto-id-text')?.textContent || '';
+            if (pid) fs._collapseState.protos[pid] = collapse;
+        });
+    }
 }
 
 // Editor area context menu for collapse/expand all — delegated on #editor-groups.
