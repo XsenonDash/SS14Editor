@@ -1,5 +1,8 @@
 # Changelogs
 
+## v1.1.16
+- `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu
+
 ## v1.1.15
 - Added support for `Ctrl+Z` and `Ctrl+Y` for version control.
 

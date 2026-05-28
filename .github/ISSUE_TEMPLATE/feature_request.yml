@@ -18,12 +18,8 @@ body:
     attributes:
       label: Proposed solution
       description: Describe what you'd like to happen.
-    validations:
-      required: true
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
       description: Any alternative solutions or workarounds you've considered?
-    validations:
-      required: false

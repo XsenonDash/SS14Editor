@@ -35,4 +35,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onWindowMaximizedChange(cb) {
         ipcRenderer.on('window-maximized-change', (_e, isMaximized) => cb(!!isMaximized));
     },
+
+    // ---- Shell -------------------------------------------------------
+    openExternal(url) { ipcRenderer.send('open-external', url); },
 });

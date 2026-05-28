@@ -99,6 +99,31 @@
     }
 
     // -----------------------------------------------------------------
+    // Help → Report a Bug / Request a Feature
+    // -----------------------------------------------------------------
+    function openUrl(url) {
+        if (window.electronAPI && typeof window.electronAPI.openExternal === 'function') {
+            window.electronAPI.openExternal(url);
+        } else {
+            window.open(url, '_blank', 'noreferrer');
+        }
+    }
+
+    const reportBugBtn = document.getElementById('hdr-report-bug');
+    if (reportBugBtn) {
+        reportBugBtn.addEventListener('click', () => {
+            openUrl('https://github.com/TheShuEd/SS14Editor/issues/new?template=bug_report.yml');
+        });
+    }
+
+    const requestFeatureBtn = document.getElementById('hdr-request-feature');
+    if (requestFeatureBtn) {
+        requestFeatureBtn.addEventListener('click', () => {
+            openUrl('https://github.com/TheShuEd/SS14Editor/issues/new?template=feature_request.yml');
+        });
+    }
+
+    // -----------------------------------------------------------------
     // Window controls (frameless BrowserWindow)
     // -----------------------------------------------------------------
     const winControls = document.getElementById('hdr-window-controls');

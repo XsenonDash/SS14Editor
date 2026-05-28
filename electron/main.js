@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -371,6 +371,11 @@ ipcMain.on('window-maximize-toggle', () => {
 ipcMain.on('window-close', () => {
     app.isQuitting = true;
     app.quit();
+});
+
+ipcMain.on('open-external', (_e, url) => {
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:') shell.openExternal(url);
 });
 
 // ---------------------------------------------------------------------------
