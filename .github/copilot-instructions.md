@@ -40,6 +40,7 @@ All `src/**/*.cs` share the single namespace `Content.Editor.Editor`, regardless
 
 ## Working principles
 1. **Tests first when refactoring.** Before any non-trivial change to a file in `src/`, check whether tests exist in `tests/ss14-editor.Tests/`. If they do, run them after editing. If they don't and the change is risky, add tests first.
+   After any change to `WebUI/js/` run `node tests/yaml/potion-ultra.test.js` (must exit 0). Both test suites are required to pass before a change is considered done.
 2. **Verify before deleting.** Do not delete code claimed to be "dead" without grepping the whole workspace (including `WebUI/`) for the symbol. Many indirect calls exist (route dispatch dictionaries, JS closures, CSS class selectors).
 3. **No new comments unless the *why* is non-obvious.** Existing code is sparsely commented; match that style.
 4. **Path safety.** All filesystem inputs from HTTP requests go through `PathSecurity.NormalizeRelative` (see [src/Core/PathSecurity.cs](src/Core/PathSecurity.cs)). Never bypass it when adding new endpoints.

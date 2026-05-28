@@ -96,6 +96,16 @@ function buildComponentsSection(proto, protoIdx, inherited, filePath) {
     return sec;
 }
 
+// Pure mutation without DOM side-effects — usable from tests and scripts.
+function _addComponent(fs, protoIdx, type) {
+    if (!fs.yaml[protoIdx].components) fs.yaml[protoIdx].components = [];
+    fs.yaml[protoIdx].components.push({ type });
+    if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+    fs.dirtyProtos?.add(protoIdx);
+    fs.dirtySinceSave?.add(protoIdx);
+    commitChange(fs);
+}
+
 function showAddComponentModal(proto, protoIdx, filePath) {
     const existing = new Set((proto.components || []).map(c => c?.type).filter(Boolean));
     if (proto.parent) {
@@ -164,6 +174,7 @@ function localizeComponent(protoIdx, compType, filePath) {
     const existing = fs.yaml[protoIdx].components.findIndex(c => c && c.type === compType);
     if (existing >= 0) return existing;
     fs.yaml[protoIdx].components.push({ type: compType });
+    if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
     return fs.yaml[protoIdx].components.length - 1;
 }
 

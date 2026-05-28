@@ -26,5 +26,8 @@ jobs:
       - name: Restore
         run: dotnet restore tests/ss14-editor.Tests/ss14-editor.Tests.csproj
 
-      - name: Test
+      - name: Test (JS yaml helpers)
+        run: node tests/yaml/potion-ultra.test.js
+
+      - name: Test (.NET)
         run: dotnet test tests/ss14-editor.Tests/ss14-editor.Tests.csproj --nologo --verbosity normal

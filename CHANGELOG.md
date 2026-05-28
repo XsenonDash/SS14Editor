@@ -1,7 +1,10 @@
 # Changelogs
 
 ## v1.1.16
-- `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu
+- `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu.
+- Fixed serialization errors when creating a prototype from scratch.
+- The editor is no longer added to the system tray.
+- Fixed bugs related to deleting and renaming files
 
 ## v1.1.15
 - Added support for `Ctrl+Z` and `Ctrl+Y` for version control.

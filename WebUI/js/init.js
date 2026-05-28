@@ -125,6 +125,14 @@ function startFileEventStream() {
                 refreshMetadataInMemory();
                 return;
             }
+            if (payload.type === 'tree-change') {
+                api.loadTree().then(t => {
+                    state.fileTree = t;
+                    const treeEl = document.getElementById('file-tree');
+                    renderFileTree(state.fileTree, treeEl, document.getElementById('file-search').value);
+                }).catch(e => console.error('[FileTree] SSE tree refresh failed:', e));
+                return;
+            }
             if (payload.type !== 'file-change') return;
             // Any file change (ours or external) can shift git status: schedule
             // a refresh so tree + tabs re-colour.

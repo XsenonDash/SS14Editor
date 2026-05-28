@@ -94,8 +94,13 @@ public sealed class FieldExtractor
         var fields = new List<(int order, FieldMetadata meta)>();
         var seen = new HashSet<string>();
 
+        // Pre-compute chain depth so base-class fields receive lower order
+        // values than derived-class fields, producing base-first output order.
+        var chainDepth = 0;
+        for (var ct = type; ct != null; ct = ct.BaseType) chainDepth++;
+
         var current = type;
-        var baseOrder = 0;
+        var depthStep = chainDepth - 1; // derived starts highest, base reaches 0
         while (current != null)
         {
             // Get all backing field tokens for proper source-order interleaving
@@ -133,10 +138,10 @@ public sealed class FieldExtractor
 
                 var meta = TryBuildFieldMeta(member);
                 if (meta != null)
-                    fields.Add((baseOrder + token, meta));
+                    fields.Add((depthStep * 100_000 + token, meta));
             }
 
-            baseOrder += 100_000;
+            depthStep--;
             current = current.BaseType;
         }
 

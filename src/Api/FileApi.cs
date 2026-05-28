@@ -89,9 +89,15 @@ internal sealed partial class ApiRouter
             await HttpJson.WriteErrorAsync(res, 404, "File not found");
             return;
         }
+        ctx.FileWatcher.SuppressNext(oldFull);
+        ctx.FileWatcher.SuppressNext(newFull);
         File.Move(oldFull, newFull);
         Logger.Info($"File renamed: {oldRel} -> {newName}");
         var newRel = Path.GetRelativePath(ctx.PrototypesDir, newFull).Replace('\\', '/');
+        ctx.ProtoIndex.RefreshFile(oldFull, oldRel);
+        ctx.ProtoIndex.RefreshFile(newFull, newRel);
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         await HttpJson.WriteAsync(res, new { success = true, newPath = newRel });
     }
 
@@ -112,9 +118,13 @@ internal sealed partial class ApiRouter
         }
         if (File.Exists(fullPath))
         {
+            ctx.FileWatcher.SuppressNext(fullPath);
             File.Delete(fullPath);
             Logger.Info($"File deleted: {relPath}");
         }
+        ctx.ProtoIndex.RefreshFile(fullPath, relPath);
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         await HttpJson.WriteAsync(res, new { success = true });
     }
 
@@ -146,6 +156,8 @@ internal sealed partial class ApiRouter
         await File.WriteAllTextAsync(fileFull, content, new UTF8Encoding(false));
         var rel = Path.GetRelativePath(ctx.PrototypesDir, fileFull).Replace('\\', '/');
         ctx.ProtoIndex.RefreshFile(fileFull, rel);
+        ctx.InvalidateTree();
+        ctx.Events.Broadcast(new { type = "tree-change" });
         await HttpJson.WriteAsync(res, new { success = true, path = rel });
     }
 }

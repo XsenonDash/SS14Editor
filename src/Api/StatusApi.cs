@@ -12,12 +12,7 @@ internal sealed partial class ApiRouter
 {
     private async Task HandleUpdateMetadataAsync(HttpListenerRequest req, HttpListenerResponse res)
     {
-        var ctx = _ctx;
-        if (ctx == null)
-        {
-            await HttpJson.WriteErrorAsync(res, 503, "No project configured.");
-            return;
-        }
+        var ctx = ScopedCtx;
         var solutionRoot = ctx.SolutionRoot;
         var dataDir = ctx.EditorDir;
 

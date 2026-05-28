@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, nativeImage, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, dialog, ipcMain, shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const http = require('http');
@@ -36,7 +36,6 @@ if (process.platform === 'linux') {
 
 let mainWindow = null;
 let splashWindow = null;
-let tray = null;
 let serverProcess = null;
 let pendingUpdateInfo = null; // available-not-yet-downloaded info, surfaced to renderer
 
@@ -236,11 +235,8 @@ function createMainWindow() {
     mainWindow.on('maximize',   () => mainWindow.webContents.send('window-maximized-change', true));
     mainWindow.on('unmaximize', () => mainWindow.webContents.send('window-maximized-change', false));
 
-    mainWindow.on('close', e => {
-        if (!app.isQuitting) {
-            e.preventDefault();
-            mainWindow.hide();
-        }
+    mainWindow.on('close', () => {
+        app.isQuitting = true;
     });
 
     // Replay any update-available event that arrived before the renderer
@@ -259,31 +255,6 @@ function createMainWindow() {
 function loadEditorUrl() {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.loadURL(`http://localhost:${PORT}/`);
-}
-
-// ---------------------------------------------------------------------------
-// System tray
-// ---------------------------------------------------------------------------
-function createTray() {
-    const icon = nativeImage.createFromPath(path.join(__dirname, '..', 'icon.ico'));
-
-    tray = new Tray(icon);
-    tray.setToolTip('SS14 Editor');
-
-    const menu = Menu.buildFromTemplate([
-        {
-            label: 'Open',
-            click: () => { mainWindow.show(); mainWindow.focus(); },
-        },
-        { type: 'separator' },
-        {
-            label: 'Quit',
-            click: () => { app.isQuitting = true; app.quit(); },
-        },
-    ]);
-
-    tray.setContextMenu(menu);
-    tray.on('double-click', () => { mainWindow.show(); mainWindow.focus(); });
 }
 
 // ---------------------------------------------------------------------------
@@ -395,7 +366,6 @@ app.whenReady().then(() => {
     //    into it as soon as the server is ready; `ready-to-show` swaps
     //    splash → main only when the page has actually painted.
     createMainWindow();
-    createTray();
 
     // 3. Start the .NET server in parallel.
     startServer().catch(err => {

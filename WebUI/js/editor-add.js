@@ -170,6 +170,8 @@ async function copyPrototype(type, sourceId, insertIdx) {
         ? insertIdx : fs.yaml.length;
     fs.yaml.splice(at, 0, clone);
     fs.structuralChange = true;
+    // Pre-expand the copied proto so it's not collapsed immediately after creation.
+    fs._collapseState.protos[clone.id] = false;
     commitChange(fs);
     renderEditor();
     if (at === fs.yaml.length - 1) {
@@ -187,22 +189,26 @@ function _generateUniqueProtoId(type, base) {
     return id;
 }
 
+// Pure mutation without DOM side-effects — usable from tests and scripts.
+function _addNewProto(fs, type, insertIdx) {
+    if (!Array.isArray(fs.yaml)) fs.yaml = [];
+    // NOTE: we intentionally do NOT seed `proto.parent = ''` here. An empty
+    // parent slot would force every new prototype into a half-filled state
+    // and dump as `parent: ''` until the user manually clears it.
+    const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
+        ? insertIdx : fs.yaml.length;
+    fs.yaml.splice(at, 0, { type, id: 'NewPrototype' });
+    fs.structuralChange = true;
+    // Pre-expand the new proto so it's not collapsed immediately after creation.
+    if (fs._collapseState) fs._collapseState.protos['NewPrototype'] = false;
+    commitChange(fs);
+    return at;
+}
+
 function addNewPrototype(type, insertIdx) {
     const fs = state.openFiles.get(state.currentFile);
     if (!fs) return;
-    if (!Array.isArray(fs.yaml)) fs.yaml = [];
-    const proto = { type, id: 'NewPrototype' };
-    // NOTE: we intentionally do NOT seed `proto.parent = ''` here. An empty
-    // parent slot would force every new prototype into a half-filled state
-    // and dump as `parent: ''` until the user manually clears it. The
-    // parent control still works without seeding because the user can click
-    // "+ Add item" on the parent bar which commits an empty slot via
-    // `onParentChange` — keeping the add-item codepath intact.
-    const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
-        ? insertIdx : fs.yaml.length;
-    fs.yaml.splice(at, 0, proto);
-    fs.structuralChange = true;
-    commitChange(fs);
+    const at = _addNewProto(fs, type, insertIdx);
     renderEditor();
     if (at === fs.yaml.length - 1) {
         const area = document.querySelector(`.editor-group[data-group-id="${state.activeGroupId}"] .group-content`);

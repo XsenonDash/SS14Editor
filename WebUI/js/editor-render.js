@@ -104,8 +104,11 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                     newCard.classList.toggle('collapsed', wasCollapsed);
                     newCard.querySelectorAll('.component-card').forEach(comp => {
                         const ct = comp.querySelector('.component-type')?.textContent || '';
-                        if (ct && compCollapse[ct] !== undefined) {
+                        if (!ct) return;
+                        if (compCollapse[ct] !== undefined) {
                             comp.classList.toggle('collapsed', compCollapse[ct]);
+                        } else {
+                            comp.classList.remove('collapsed');
                         }
                     });
                     const newDDs = newCard.querySelectorAll('.datadef-inline');

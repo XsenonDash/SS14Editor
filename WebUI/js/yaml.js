@@ -52,8 +52,11 @@ function _jsToNode(val, doc) {
     const tag = val.__yamlTag ? '!type:' + val.__yamlTag : null;
     const keys = Object.keys(val).filter(k => k !== '__yamlTag');
     if (tag && keys.length === 0) {
-        // Parameterless polymorphic item → bare tagged scalar (`!type:Foo`)
-        const scalar = doc.createNode(null);
+        // Parameterless polymorphic item → bare tagged scalar (`!type:Foo`).
+        // Parsed bare tags have value="" + type=PLAIN; match that exactly so
+        // _normalizeScalarStyles never re-quotes the empty-string value.
+        const scalar = doc.createNode('');
+        scalar.type = 'PLAIN';
         scalar.tag = tag;
         return scalar;
     }
@@ -177,14 +180,58 @@ function _canonicalizeComponent(comp) {
 // ──────────────────────────────────────────────────────────────────────
 //  Stringify helpers
 // ──────────────────────────────────────────────────────────────────────
-const _DUMP_OPTS = { indent: 2, lineWidth: -1, singleQuote: true, indentSeq: false };
+const _DUMP_OPTS = { indent: 2, lineWidth: -1, singleQuote: null, indentSeq: false };
 
+// eemeli/yaml cannot produce bare tagged scalars (‘!type:Foo’ with no value);
+// it always appends "" for empty-string scalar values.  Post-process the
+// serialized text to restore the canonical SS14 form.
+function _stripBareTagQuotes(yaml) {
+    return yaml.replace(/(!type:\S+) ""/g, '$1');
+}
+// Canonical sort order for well-known SS14 prototype field names.
+// Fields absent from this map retain their insertion order, placed after all
+// known fields.  Lower value → earlier in output.
+const _FIELD_PRIORITY = {
+    // entity / recipe top-level
+    type: 0, id: 1, parent: 2, name: 3, description: 4, suffix: 5, categories: 6, components: 7,
+    // effect parameters (ApplyStatusEffectStack, etc.)
+    statusEffect: 10, amount: 11, max: 12,
+    // area-effect / selector parameters
+    range: 13, whitelist: 14, effects: 15,
+    // polymorphic target / spawn fields
+    effectTarget: 16, spawns: 17, distance: 18,
+    // Sprite / layer fields
+    drawdepth: 20, layers: 21, state: 22, color: 23,
+    // animation / slot fields
+    anim: 25, animations: 26, effectSlots: 27,
+};
+
+// Recursively sort map pairs by canonical priority (stable: equal-priority
+// pairs keep insertion order).  Applied before every proto serialization so
+// that field write-order in the editor does not affect YAML output order.
+function _sortMapFields(node) {
+    if (!node || typeof node !== 'object') return;
+    if (YAML.isMap(node)) {
+        node.items.sort((a, b) => {
+            const ka = YAML.isScalar(a.key) ? String(a.key.value) : '';
+            const kb = YAML.isScalar(b.key) ? String(b.key.value) : '';
+            return (_FIELD_PRIORITY[ka] ?? Infinity) - (_FIELD_PRIORITY[kb] ?? Infinity);
+        });
+        for (const pair of node.items) {
+            if (YAML.isPair(pair)) _sortMapFields(pair.value);
+        }
+    } else if (YAML.isSeq(node)) {
+        for (const item of node.items) _sortMapFields(item);
+    }
+}
 function _dumpSingleProto(proto) {
     const doc = new YAML.Document();
     const seq = doc.createNode([]);
-    seq.add(_jsToNode(_canonicalizeProto(proto), doc));
+    const protoNode = _jsToNode(_canonicalizeProto(proto), doc);
+    _sortAstProtoNode(protoNode);
+    seq.add(protoNode);
     doc.contents = seq;
-    return doc.toString(_DUMP_OPTS);
+    return _stripBareTagQuotes(doc.toString(_DUMP_OPTS));
 }
 
 /**
@@ -231,6 +278,10 @@ function dumpYamlRespectful(yamlArray, doc, originalText, dirtyIndices) {
         // (blank lines, inter-item comments, leading file comments, etc.)
         parts.push(originalText.slice(pos, itemStart));
         if (dirtyIndices.has(i)) {
+            // Normalize scalar styles before serializing so that scalars
+            // that were quoted in the source (e.g. parent: "BaseMob") are
+            // re-emitted without unnecessary quotes after any edit.
+            _normalizeScalarStyles(items[i]);
             // Serialize from the (mutated) AST node so internal comments
             // (commentBefore on child nodes) are preserved even when field
             // values were changed via docSetField / docDeleteField.
@@ -266,7 +317,90 @@ function _forceBlockStyle(node) {
     }
 }
 
+/**
+ * Recursively clear the `style` property on all Scalar nodes so that
+ * eemeli/yaml re-determines the quoting style from the value.
+ * Applied to dirty proto AST nodes before serialization to ensure that
+ * scalars originally quoted in the source (e.g. parent: "BaseMob") are
+ * not preserved with unnecessary quotes.
+ * Values that genuinely require quoting (e.g. "true", "#ff0000") will
+ * be re-quoted automatically by the serializer.
+ */
+function _normalizeScalarStyles(node) {
+    if (!node || typeof node !== 'object') return;
+    if (YAML.isScalar(node)) {
+        // Bare-tag scalars (empty value + custom tag, e.g. !type:Delete) must
+        // keep PLAIN type — clearing it causes eemeli/yaml to re-quote the
+        // empty string as "" instead of leaving it as a bare tag.
+        if (!(node.value === '' && node.tag)) node.type = undefined;
+        return;
+    }
+    if (YAML.isSeq(node)) { for (const item of node.items) _normalizeScalarStyles(item); }
+    else if (YAML.isMap(node)) {
+        for (const pair of node.items) {
+            if (YAML.isPair(pair)) {
+                _normalizeScalarStyles(pair.key);
+                _normalizeScalarStyles(pair.value);
+            }
+        }
+    }
+}
+
+/**
+ * Sort the pairs of a YAML Map AST node by an explicit field order list.
+ * structuralHead fields come first, then fieldOrder fields, then any
+ * remaining fields in their original relative order (stable).
+ */
+function _sortAstMapByOrder(mapNode, fieldOrder, structuralHead) {
+    if (!mapNode || !YAML.isMap(mapNode)) return;
+    const order = [];
+    if (structuralHead) for (const k of structuralHead) if (!order.includes(k)) order.push(k);
+    if (fieldOrder)     for (const k of fieldOrder)     if (!order.includes(k)) order.push(k);
+    if (order.length === 0) return;
+    mapNode.items.sort((a, b) => {
+        const ka = YAML.isScalar(a.key) ? String(a.key.value) : '';
+        const kb = YAML.isScalar(b.key) ? String(b.key.value) : '';
+        const ia = order.indexOf(ka);
+        const ib = order.indexOf(kb);
+        return (ia >= 0 ? ia : Infinity) - (ib >= 0 ? ib : Infinity);
+    });
+}
+
+/**
+ * Sort the AST pairs of a proto map node (and its component sub-nodes) by
+ * DLL-metadata field order so that the serialized YAML matches the visual
+ * layout of the redactor.  Falls back to _sortMapFields (static
+ * _FIELD_PRIORITY) when metadata is not loaded.
+ */
+function _sortAstProtoNode(protoNode) {
+    if (!protoNode || !YAML.isMap(protoNode)) return;
+    const typePair  = protoNode.items.find(p => YAML.isScalar(p.key) && p.key.value === 'type');
+    const protoType = typePair && YAML.isScalar(typePair.value) ? String(typePair.value.value) : null;
+    const metaProto = (typeof state !== 'undefined' && protoType && state.metadata?.prototypes?.[protoType]) || null;
+    const protoFieldOrder = _fieldOrderFor(metaProto);
+    if (!protoFieldOrder) {
+        _sortMapFields(protoNode);
+        return;
+    }
+    _sortAstMapByOrder(protoNode, protoFieldOrder, _PROTO_STRUCTURAL_HEAD);
+    const compsPair = protoNode.items.find(p => YAML.isScalar(p.key) && p.key.value === 'components');
+    if (!compsPair || !YAML.isSeq(compsPair.value)) return;
+    for (const compNode of compsPair.value.items) {
+        if (!YAML.isMap(compNode)) continue;
+        const cTypePair   = compNode.items.find(p => YAML.isScalar(p.key) && p.key.value === 'type');
+        const cType       = cTypePair && YAML.isScalar(cTypePair.value) ? String(cTypePair.value.value) : null;
+        const metaComp    = (typeof state !== 'undefined' && cType && state.metadata?.components?.[cType]) || null;
+        const cFieldOrder = _fieldOrderFor(metaComp);
+        if (cFieldOrder) {
+            _sortAstMapByOrder(compNode, cFieldOrder, ['type']);
+        } else {
+            _sortMapFields(compNode);
+        }
+    }
+}
+
 function _dumpSingleProtoFromNode(node) {
+    _sortAstProtoNode(node);
     _forceBlockStyle(node);
     const origSpace   = node.spaceBefore;
     const origComment = node.commentBefore;
@@ -277,7 +411,7 @@ function _dumpSingleProtoFromNode(node) {
         const seq = tmpDoc.createNode([]);
         seq.add(node);
         tmpDoc.contents = seq;
-        return tmpDoc.toString(_DUMP_OPTS);
+        return _stripBareTagQuotes(tmpDoc.toString(_DUMP_OPTS));
     } finally {
         node.spaceBefore   = origSpace;
         node.commentBefore = origComment;
@@ -321,6 +455,11 @@ function _astNodeMatchKey(node) {
     if (node === null || node === undefined) return 'n';
     if (YAML.isScalar(node)) {
         const v = node.value;
+        // Bare-tag scalar (!type:Foo with empty value) — match the same key as
+        // _seqMatchKey would produce for {__yamlTag:'Foo'} so that comment-
+        // preserving match-by-value works across round-trips.
+        if (v === '' && node.tag && node.tag.startsWith('!type:'))
+            return 'o!' + node.tag.slice(6) + ':{}'; 
         if (v === null || v === undefined) return 'n';
         if (typeof v === 'string') return 's:' + v;
         if (typeof v === 'number') return 'f:' + v;
@@ -372,6 +511,11 @@ function _patchSeq(astNode, jsValue, doc) {
         if (diffs === 0) return;
         if (diffs === 1) {
             _patchSeqItemAt(astNode, diffIdx, jsValue[diffIdx], doc);
+            for (let i = 0; i < astNode.items.length; i++) {
+                const s = astNode.items[i];
+                if (i !== diffIdx && YAML.isScalar(s) && !(s.value === '' && s.tag))
+                    s.type = undefined;
+            }
             return;
         }
     }
@@ -402,6 +546,8 @@ function _patchSeq(astNode, jsValue, doc) {
                 if (_astNodeMatchKey(reusedNode) !== want) {
                     _patchSeqItemAt({ items: newItems }, i, jsValue[i], doc, reusedNode);
                 } else {
+                    if (YAML.isScalar(reusedNode) && !(reusedNode.value === '' && reusedNode.tag))
+                        reusedNode.type = undefined;
                     newItems[i] = reusedNode;
                 }
             } else {
@@ -418,6 +564,9 @@ function _patchSeq(astNode, jsValue, doc) {
     for (let i = 0; i < minLen; i++) _patchSeqItemAt(astNode, i, jsValue[i], doc);
     for (let i = minLen; i < jsValue.length; i++) astNode.add(_jsToNode(jsValue[i], doc));
     astNode.items.splice(jsValue.length);
+    for (const item of astNode.items) {
+        if (YAML.isScalar(item) && !(item.value === '' && item.tag)) item.type = undefined;
+    }
 }
 
 // Patch (or replace) the item at index `i` of `astNode.items` to represent
@@ -430,7 +579,10 @@ function _patchSeqItemAt(astNode, i, jsItem, doc, forceNode) {
     const jsIsObj = jsItem !== null && typeof jsItem === 'object' && !Array.isArray(jsItem);
     const jsIsArr = Array.isArray(jsItem);
     if (item !== undefined) {
-        if (YAML.isScalar(item) && !jsIsObj && !jsIsArr) { item.value = jsItem; astNode.items[i] = item; return; }
+        if (YAML.isScalar(item) && !jsIsObj && !jsIsArr) {
+            if (item.value !== jsItem) item.type = undefined;
+            item.value = jsItem; astNode.items[i] = item; return;
+        }
         if (YAML.isMap(item) && jsIsObj && item.tag === _expectedTag(jsItem)) {
             _patchAstNode(item, jsItem, doc); astNode.items[i] = item; return;
         }
@@ -450,6 +602,7 @@ function _patchSeqItemAt(astNode, i, jsItem, doc, forceNode) {
  */
 function _patchAstNode(astNode, jsValue, doc) {
     if (YAML.isScalar(astNode)) {
+        if (astNode.value !== jsValue) astNode.type = undefined;
         astNode.value = jsValue;
         return;
     }
@@ -516,6 +669,14 @@ function docSetField(doc, path, tag, value) {
             // a type change must go through _jsToNode so the tag is written correctly.
             if (YAML.isMap(existingNode) && !Array.isArray(value) &&
                 existingNode.tag === _expectedTag(value)) {
+                _patchAstNode(existingNode, value, doc);
+                return true;
+            }
+        } else {
+            // Primitive (scalar) value: patch the existing scalar node in-place
+            // so any inline comment stored on it (pair.value.comment) is preserved.
+            const existingNode = doc.getIn([...path, tag], true);
+            if (YAML.isScalar(existingNode)) {
                 _patchAstNode(existingNode, value, doc);
                 return true;
             }
