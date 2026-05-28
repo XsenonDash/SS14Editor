@@ -401,6 +401,7 @@ function flagsCtrl(val, opts, dis, cb) {
     });
     // Close dropdown when clicking outside
     document.addEventListener('click', e => {
+        if (!document.contains(w)) return;
         if (!w.contains(e.target) && dd.classList.contains('visible')) {
             commitIfChanged();
             dd.classList.remove('visible');

@@ -100,6 +100,20 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                         fs._collapseState.protos[cardProtoId] = wasCollapsed;
                         fs._collapseState.comps[cardProtoId] = { ...compCollapse };
                     }
+                    // Save focus so the active field isn't silently lost after replaceChild.
+                    const _focusedEl = document.activeElement;
+                    let _focusKey = null, _focusSelStart = null, _focusSelEnd = null;
+                    if (_focusedEl && existingCard.contains(_focusedEl)) {
+                        const _compCard = _focusedEl.closest('.component-card');
+                        const _compType = _compCard?.dataset?.compType ?? '';
+                        const _fieldRow = _focusedEl.closest('[data-field-key]');
+                        const _fieldKey = _fieldRow?.dataset?.fieldKey ?? '';
+                        if (_fieldKey) _focusKey = `${_compType}::${_fieldKey}`;
+                        if (_focusedEl.selectionStart !== undefined) {
+                            _focusSelStart = _focusedEl.selectionStart;
+                            _focusSelEnd   = _focusedEl.selectionEnd;
+                        }
+                    }
                     const newCard = buildCard(ep, pendingIdx, filePath);
                     newCard.classList.toggle('collapsed', wasCollapsed);
                     newCard.querySelectorAll('.component-card').forEach(comp => {
@@ -116,6 +130,23 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                         if (newDDs[i]) newDDs[i].classList.toggle('collapsed', c);
                     });
                     area.replaceChild(newCard, existingCard);
+                    // Restore focus to the same field in the new card.
+                    if (_focusKey) {
+                        const [_compType, _fieldKey] = _focusKey.split('::');
+                        const _scope = _compType
+                            ? newCard.querySelector(`.component-card[data-comp-type="${CSS.escape(_compType)}"]`)
+                            : newCard;
+                        const _row = (_scope ?? newCard).querySelector(`[data-field-key="${CSS.escape(_fieldKey)}"]`);
+                        if (_row) {
+                            const _inp = _row.querySelector('input, select, textarea') ?? _row;
+                            if (_inp.tagName === 'INPUT' || _inp.tagName === 'SELECT' || _inp.tagName === 'TEXTAREA') {
+                                _inp.focus({ preventScroll: true });
+                                if (_focusSelStart !== null && _inp.setSelectionRange) {
+                                    try { _inp.setSelectionRange(_focusSelStart, _focusSelEnd); } catch {}
+                                }
+                            }
+                        }
+                    }
                     return;
                 } catch (e) {
                     console.error('[Editor] Targeted card update failed, falling back:', e);
