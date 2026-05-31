@@ -62,6 +62,8 @@ function showSearchableTypePicker(anchorEl, items, currentFn, onPick, allowBase 
                 const short = fn.split('.').pop();
                 const ns = fn.substring(0, fn.length - short.length - 1);
                 row.innerHTML = `<span class="dropdown-id">${esc(short)}</span><span class="dropdown-name">${esc(ns)}</span>`;
+                const ddSummary = state.metadata?.dataDefinitions?.[fn]?.summary;
+                if (ddSummary) row.title = ddSummary;
             }
             if (fn === currentFn) row.classList.add('selected');
             row.addEventListener('mousedown', e => {
@@ -585,7 +587,8 @@ function dataDefCtrl(val, ddType, dis, onChange) {
         btn.className = 'datadef-type-btn';
         const currentFn = effectiveType !== ddType ? effectiveType : null;
         btn.textContent = currentFn ? currentFn.split('.').pop() : '(base)';
-        btn.title = currentFn || '(base — no !type: tag)';
+        const _btnTypeSummary = state.metadata?.dataDefinitions?.[currentFn || ddType]?.summary;
+        btn.title = (currentFn || '(base — no !type: tag)') + (_btnTypeSummary ? '\n\n' + _btnTypeSummary : '');
         btn.addEventListener('contextmenu', e => {
             e.preventDefault();
             e.stopPropagation();

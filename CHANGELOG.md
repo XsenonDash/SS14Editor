@@ -6,7 +6,8 @@
 - The buttons for adding prototype cards and comments between prototypes are now always visible.
 - Optimized metadata collection: the file is now smaller and loads faster.
 - Fixed some bugs related to data cards automatically collapsing when edited.
-- You can now rearrange dictionary entries using drag and drop
+- You can now rearrange dictionary entries using drag and drop.
+- `!type:` Polymorphic types now display an XML summary on hover, both when searching in the dropdown menu and in cards that have already been added.
 
 ## v1.1.16
 - `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu.
