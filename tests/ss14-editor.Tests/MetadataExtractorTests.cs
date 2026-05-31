@@ -146,13 +146,23 @@ public class MetadataExtractorTests
         Assert.True(physDD.HasValue, "FixturePhysicsData data definition not found in metadata");
 
         var fields = physDD.Value.GetProperty("fields").EnumerateArray().ToList();
+        var root = doc.RootElement;
+
+        // Helper: resolve enum values from either inline enumValues or via enumRef -> root.enums
+        System.Collections.Generic.List<string> ResolveEnumVals(JsonElement field)
+        {
+            if (field.TryGetProperty("enumValues", out var inline))
+                return inline.EnumerateArray().Select(e => e.GetString()!).ToList();
+            var enumRef = field.GetProperty("enumRef").GetString()!;
+            return root.GetProperty("enums").GetProperty(enumRef)
+                       .EnumerateArray().Select(e => e.GetString()!).ToList();
+        }
 
         // --- layer field ---
         var layerField = fields.Single(f => f.GetProperty("tag").GetString() == "layer");
         Assert.Equal("flags", layerField.GetProperty("fieldKind").GetString());
 
-        var layerEnumVals = layerField.GetProperty("enumValues").EnumerateArray()
-            .Select(e => e.GetString()!).ToList();
+        var layerEnumVals = ResolveEnumVals(layerField);
         Assert.Contains("WallLayer", layerEnumVals);
         Assert.Contains("MobLayer", layerEnumVals);
         Assert.Contains("FullTileMask", layerEnumVals);
@@ -161,8 +171,7 @@ public class MetadataExtractorTests
         var maskField = fields.Single(f => f.GetProperty("tag").GetString() == "mask");
         Assert.Equal("flags", maskField.GetProperty("fieldKind").GetString());
 
-        var maskEnumVals = maskField.GetProperty("enumValues").EnumerateArray()
-            .Select(e => e.GetString()!).ToList();
+        var maskEnumVals = ResolveEnumVals(maskField);
         Assert.Contains("WallLayer", maskEnumVals);
         Assert.Contains("MobLayer", maskEnumVals);
     }
