@@ -197,8 +197,8 @@ function controlFor(meta, value, dis, onChange) {
         case 'float':         return floatCtrl(value, dis, onChange);
         case 'text':          return textCtrl(value, dis, onChange);
         case 'color':         return colorCtrl(value, dis, onChange);
-        case 'enum':          return enumCtrl(value, meta.enumValues || [], dis, onChange);
-        case 'flags':         return flagsCtrl(value, meta.enumValues || [], dis, onChange);
+        case 'enum':          return enumCtrl(value, meta.enumValues || (meta.enumRef && state.metadata?.enums?.[meta.enumRef]) || [], dis, onChange);
+        case 'flags':         return flagsCtrl(value, meta.enumValues || (meta.enumRef && state.metadata?.enums?.[meta.enumRef]) || [], dis, onChange);
         case 'entityProtoId': return searchDropdown(value, 'entity', dis, onChange);
         case 'protoId':       return searchDropdown(value, meta.protoTypeArg || 'entity', dis, onChange);
         case 'list':          return listCtrl(value, meta, dis, onChange);
@@ -629,6 +629,7 @@ function synthMeta(node, extras) {
         fullType: n.fullType,
         protoTypeArg: n.protoTypeArg,
         enumValues: n.enumValues,
+        enumRef: n.enumRef,
         isDataDefinition: !!n.isDataDefinition,
         dataDefinitionType: n.dataDefinitionType,
         // Recursive children — read by listCtrl / mapCtrl one level

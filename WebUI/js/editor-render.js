@@ -50,8 +50,11 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
     }
     const protos = fs.yaml;
     if (!Array.isArray(protos) || protos.length === 0) {
-        area.innerHTML = '<div class="empty-state"><p>No prototypes found in this file.</p></div>';
+        area.innerHTML = '';
         area.appendChild(buildInterProtoToolbar(filePath, 0, 0));
+        const emptyDiv = _div('empty-state');
+        emptyDiv.innerHTML = '<p>No prototypes found in this file.</p>';
+        area.appendChild(emptyDiv);
         return;
     }
 
@@ -99,6 +102,11 @@ function renderEditor(groupId, allowTargetedUpdate = false) {
                     if (cardProtoId && fs._collapseState) {
                         fs._collapseState.protos[cardProtoId] = wasCollapsed;
                         fs._collapseState.comps[cardProtoId] = { ...compCollapse };
+                        if (!fs._collapseState.datadefs) fs._collapseState.datadefs = {};
+                        existingCard.querySelectorAll('.datadef-inline').forEach(dd => {
+                            const path = _ddPath(dd, cardProtoId);
+                            if (path) fs._collapseState.datadefs[path] = dd.classList.contains('collapsed');
+                        });
                     }
                     // Save focus so the active field isn't silently lost after replaceChild.
                     const _focusedEl = document.activeElement;
@@ -277,12 +285,16 @@ function buildCollapseBtn(getCard) {
             if (pid && fs?._collapseState) {
                 if (card === protoCard) {
                     fs._collapseState.protos[pid] = card.classList.contains('collapsed');
-                } else {
+                } else if (card.classList.contains('component-card')) {
                     const ct = card.querySelector('.component-type')?.textContent || '';
                     if (ct) {
                         if (!fs._collapseState.comps[pid]) fs._collapseState.comps[pid] = {};
                         fs._collapseState.comps[pid][ct] = card.classList.contains('collapsed');
                     }
+                } else if (card.classList.contains('datadef-inline')) {
+                    if (!fs._collapseState.datadefs) fs._collapseState.datadefs = {};
+                    const path = _ddPath(card, pid);
+                    if (path) fs._collapseState.datadefs[path] = card.classList.contains('collapsed');
                 }
             }
         }
@@ -297,8 +309,47 @@ function buildCollapseBtn(getCard) {
 // Reads current collapse state from the DOM and merges it into the
 // FileState._collapseState for persistent storage. When fs is provided the
 // result is also written into fs._collapseState so it survives undo/redo.
+
+// Build a stable string key for a datadef-inline element inside a proto card.
+// Walks up the ancestor chain collecting field keys (from .field-row[data-field-key])
+// and, for list/map items, the sibling index among .datadef-inline elements with
+// the same parent. Returns null when a stable path cannot be determined.
+function _ddPath(dd, protoId) {
+    const parts = [];
+    let node = dd;
+    while (node) {
+        const parent = node.parentElement;
+        if (!parent) break;
+        if (parent.classList.contains('proto-card')) break;
+        if (parent.classList.contains('component-card')) {
+            const ct = parent.querySelector('.component-type')?.textContent || '';
+            if (ct) parts.unshift('C:' + ct);
+            break;
+        }
+        if (node.classList.contains('datadef-inline') && node !== dd) {
+            // We hit an ancestor datadef-inline — its own path segment is handled
+            // by the field-row it sits in, so just continue up.
+        }
+        const fieldRow = parent.closest('.field-row[data-field-key]');
+        if (fieldRow && !parts[0]?.startsWith('F:' + fieldRow.dataset.fieldKey)) {
+            // Record list position if there are siblings at this level.
+            const siblings = Array.from(parent.children).filter(c => c.classList.contains('datadef-inline'));
+            if (siblings.length > 1) {
+                const pos = siblings.indexOf(node);
+                if (pos >= 0) parts.unshift('I:' + pos);
+            }
+            parts.unshift('F:' + fieldRow.dataset.fieldKey);
+            node = fieldRow.parentElement;
+            continue;
+        }
+        node = parent;
+    }
+    if (!parts.length) return null;
+    return protoId + '/' + parts.join('/');
+}
+
 function saveCollapseState(area, fs) {
-    const saved = { protos: {}, comps: {} };
+    const saved = { protos: {}, comps: {}, datadefs: {} };
     area.querySelectorAll('.proto-card').forEach(card => {
         const pid = card.dataset.protoId || card.querySelector('.proto-id-text')?.textContent || '';
         if (!pid) return;
@@ -309,10 +360,16 @@ function saveCollapseState(area, fs) {
             if (!ct) return;
             saved.comps[pid][ct] = comp.classList.contains('collapsed');
         });
+        card.querySelectorAll('.datadef-inline').forEach(dd => {
+            const path = _ddPath(dd, pid);
+            if (path) saved.datadefs[path] = dd.classList.contains('collapsed');
+        });
     });
     if (fs) {
         Object.assign(fs._collapseState.protos, saved.protos);
         Object.assign(fs._collapseState.comps, saved.comps);
+        if (!fs._collapseState.datadefs) fs._collapseState.datadefs = {};
+        Object.assign(fs._collapseState.datadefs, saved.datadefs);
     }
     return saved;
 }
@@ -345,6 +402,14 @@ function restoreCollapseState(area, saved) {
                 comp.classList.remove('collapsed');
             }
         });
+        if (saved.datadefs && Object.keys(saved.datadefs).length > 0) {
+            card.querySelectorAll('.datadef-inline').forEach(dd => {
+                const path = _ddPath(dd, pid);
+                if (path && saved.datadefs[path] !== undefined) {
+                    dd.classList.toggle('collapsed', saved.datadefs[path]);
+                }
+            });
+        }
     });
 }
 

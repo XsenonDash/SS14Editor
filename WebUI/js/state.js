@@ -38,7 +38,7 @@ class FileState {
         this._lastSnapshotTime   = 0;    // ms timestamp of last pushed snapshot
         this._lastSnapshotProtoIdx = undefined; // proto index of last pushed snapshot
         // Persistent collapse state — survives undo/redo because it is UI state,
-        // not YAML content. Shape: { protos: {[pid]: bool}, comps: {[pid]: {[ct]: bool}} }
-        this._collapseState = { protos: {}, comps: {} };
+        // not YAML content. Shape: { protos: {[pid]: bool}, comps: {[pid]: {[ct]: bool}}, datadefs: {[path]: bool} }
+        this._collapseState = { protos: {}, comps: {}, datadefs: {} };
     }
 }

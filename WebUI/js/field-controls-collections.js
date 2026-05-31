@@ -321,8 +321,49 @@ function mapCtrl(val, meta, dis, onChange) {
     function rebuild() {
         w.innerHTML = '';
         const isBlock = _isBlockValue(meta.value);
-        for (const [k, v] of Object.entries(obj)) {
+        const keys = Object.keys(obj);
+        for (let entryIdx = 0; entryIdx < keys.length; entryIdx++) {
+            const k = keys[entryIdx];
+            const v = obj[k];
             const row = _div(isBlock ? 'map-entry map-entry--block' : 'map-entry');
+            row.dataset.mapKey = k;
+            let handle = null;
+            if (!dis) {
+                handle = _div('drag-handle');
+                handle.textContent = '⋮⋮';
+                handle.draggable = true;
+                handle.title = 'Drag to reorder';
+                handle.addEventListener('dragstart', e => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', k);
+                    row.classList.add('dragging');
+                });
+                handle.addEventListener('dragend', () => row.classList.remove('dragging'));
+                row.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    row.classList.add('drop-target');
+                });
+                row.addEventListener('dragleave', () => row.classList.remove('drop-target'));
+                row.addEventListener('drop', e => {
+                    e.preventDefault();
+                    row.classList.remove('drop-target');
+                    const fromKey = e.dataTransfer.getData('text/plain');
+                    const toKey = k;
+                    if (!fromKey || fromKey === toKey || !Object.prototype.hasOwnProperty.call(obj, fromKey)) return;
+                    // Reorder by rebuilding the object with moved entry.
+                    const curKeys = Object.keys(obj);
+                    const fromIdx = curKeys.indexOf(fromKey);
+                    const toIdx = curKeys.indexOf(toKey);
+                    if (fromIdx < 0 || toIdx < 0) return;
+                    curKeys.splice(fromIdx, 1);
+                    curKeys.splice(toIdx, 0, fromKey);
+                    const vals = {};
+                    for (const ek of Object.keys(obj)) { vals[ek] = obj[ek]; delete obj[ek]; }
+                    for (const ek of curKeys) obj[ek] = vals[ek];
+                    onChange({ ...obj }); rebuild();
+                });
+            }
             const keyLabel = _div('map-key-label');
             if (dis) {
                 keyLabel.textContent = k;
@@ -349,6 +390,14 @@ function mapCtrl(val, meta, dis, onChange) {
             if (isBlock) {
                 // Block layout: key (+ remove btn) on first line, value indented below.
                 const hdr = _div('map-entry-header');
+                if (!dis) {
+                    hdr.classList.add('has-handle');
+                    hdr.appendChild(handle);
+                    const dash = _el('span');
+                    dash.className = 'map-entry-dash';
+                    dash.textContent = '- ';
+                    hdr.appendChild(dash);
+                }
                 hdr.appendChild(keyLabel);
                 if (!dis) {
                     const rm = _el('button'); rm.className = 'entry-remove-btn'; rm.textContent = '×'; rm.title = 'Remove';
@@ -359,6 +408,7 @@ function mapCtrl(val, meta, dis, onChange) {
                 row.appendChild(content);
             } else {
                 // Inline layout: key: value on one line (simple scalars).
+                if (!dis) row.prepend(handle);
                 row.appendChild(keyLabel);
                 row.appendChild(content);
                 if (!dis) {

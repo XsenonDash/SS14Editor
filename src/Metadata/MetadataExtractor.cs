@@ -182,6 +182,8 @@ public static class MetadataExtractor
             EnumConstants = enumConstants,
         };
 
+        DeduplicateEnums(metadata);
+
         var options = new JsonSerializerOptions
         {
             WriteIndented = true,
@@ -201,6 +203,55 @@ public static class MetadataExtractor
         if (skippedTypes > 0)
             Logger.Info($"Skipped {skippedTypes} problematic types");
         Logger.Info($"Metadata written to: {outputPath}");
+    }
+
+    /// <summary>
+    /// Walks every <see cref="FieldMetadata"/> and <see cref="FieldTypeNode"/>
+    /// in the metadata graph, collects all unique <c>EnumValues</c> arrays into
+    /// <see cref="MetadataRoot.Enums"/> (keyed by the field's full type name),
+    /// and replaces each inline array with an <c>EnumRef</c> key. This avoids
+    /// repeating the same 20–200-entry string array for every field that uses
+    /// a common enum type such as <c>Direction</c> or <c>CollisionGroup</c>.
+    /// </summary>
+    private static void DeduplicateEnums(MetadataRoot root)
+    {
+        static void ProcessNode(FieldTypeNode n, Dictionary<string, string[]> enums)
+        {
+            if (n.EnumValues != null && n.FullType != null)
+            {
+                enums.TryAdd(n.FullType, n.EnumValues);
+                n.EnumRef = n.FullType;
+                n.EnumValues = null;
+            }
+            if (n.Element != null) ProcessNode(n.Element, enums);
+            if (n.Key    != null) ProcessNode(n.Key,     enums);
+            if (n.Value  != null) ProcessNode(n.Value,   enums);
+            if (n.TupleElements != null)
+                foreach (var t in n.TupleElements) ProcessNode(t, enums);
+        }
+
+        static void ProcessField(FieldMetadata f, Dictionary<string, string[]> enums)
+        {
+            if (f.EnumValues != null && f.FullType != null)
+            {
+                enums.TryAdd(f.FullType, f.EnumValues);
+                f.EnumRef = f.FullType;
+                f.EnumValues = null;
+            }
+            if (f.Element != null) ProcessNode(f.Element, enums);
+            if (f.Key     != null) ProcessNode(f.Key,     enums);
+            if (f.Value   != null) ProcessNode(f.Value,   enums);
+            if (f.TupleElements != null)
+                foreach (var t in f.TupleElements) ProcessNode(t, enums);
+        }
+
+        var enums = root.Enums;
+        foreach (var p in root.Prototypes.Values)
+            foreach (var f in p.Fields) ProcessField(f, enums);
+        foreach (var c in root.Components.Values)
+            foreach (var f in c.Fields) ProcessField(f, enums);
+        foreach (var d in root.DataDefinitions.Values)
+            foreach (var f in d.Fields) ProcessField(f, enums);
     }
 
     /// <summary>

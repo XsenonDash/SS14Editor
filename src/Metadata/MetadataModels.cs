@@ -25,6 +25,15 @@ public sealed class MetadataRoot
     /// otherwise classify as plain integers) as enum-style dropdowns.
     /// </summary>
     public Dictionary<string, List<EnumConstantEntry>> EnumConstants { get; set; } = new();
+
+    /// <summary>
+    /// Deduplicated enum value arrays. Keys are the enum type's full name
+    /// (e.g. <c>Robust.Shared.Maths.Direction</c>). Each
+    /// <see cref="FieldMetadata"/> and <see cref="FieldTypeNode"/> with kind
+    /// <c>enum</c> or <c>flags</c> carries an <see cref="FieldMetadata.EnumRef"/>
+    /// pointing here instead of an inline copy of the values.
+    /// </summary>
+    public Dictionary<string, string[]> Enums { get; set; } = new();
 }
 
 public sealed class EnumConstantEntry
@@ -73,6 +82,8 @@ public sealed class FieldMetadata
     public bool? NeverPushInheritance { get; set; }
     public string? ProtoTypeArg { get; set; }
     public string[]? EnumValues { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EnumRef { get; set; }
 
     // Schema-level default extracted from the C# field/property initializer
     // by scanning constructor IL. When <see cref="HasDefault"/> is false the
@@ -122,6 +133,8 @@ public sealed class FieldTypeNode
     public string? FullType { get; set; }
     public string? ProtoTypeArg { get; set; }
     public string[]? EnumValues { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EnumRef { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsDataDefinition { get; set; }
     public string? DataDefinitionType { get; set; }

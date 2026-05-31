@@ -1034,6 +1034,8 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 .list-item .drag-handle:active { cursor: grabbing; }
 .list-item.dragging { opacity: 0.5; }
 .list-item.drop-target { border-color: var(--accent); background: var(--accent-dim); }
+.map-entry.dragging { opacity: 0.5; }
+.map-entry.drop-target { border-color: var(--accent); background: var(--accent-dim); }
 
 /* Map key host – sized so search dropdowns/enums render comfortably */
 .map-key-host { min-width: 160px; max-width: 260px; flex-shrink: 0; }
@@ -1221,14 +1223,7 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
     padding: 2px 0;
     margin: 4px 0;
     min-height: 18px;
-    opacity: 0;
-    transition: opacity .15s;
 }
-.inter-proto-toolbar:hover,
-.inter-proto-toolbar:focus-within { opacity: 1; }
-/* In an empty file the toolbar is the only way to add the first proto, so
-   keep it fully visible regardless of hover. */
-.group-content:has(> .empty-state) > .inter-proto-toolbar { opacity: 1; }
 /* When a proto comment block is being dragged, show every toolbar so the
    user has visible drop targets between every pair of cards. */
 .editor-area.dragging-proto-comment .inter-proto-toolbar { opacity: 1; }
@@ -1973,6 +1968,14 @@ body.is-maximized .app-header-winbtn .ico-restore { display: inline-block; }
 }
 .map-entry-header::before {
     content: '- ';
+    color: var(--yaml-punct);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    flex-shrink: 0;
+    line-height: 1.5;
+}
+.map-entry-header.has-handle::before { content: none; }
+.map-entry-dash {
     color: var(--yaml-punct);
     font-family: var(--font-mono);
     font-size: 13px;

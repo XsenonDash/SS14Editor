@@ -3,6 +3,10 @@
 ## v1.1.17
 - Fixed a bug where entity prototypes without components were created with incorrect serialization.
 - A bug has been fixed that prevented `Ctrl+Z` and `Ctrl+Y` from working on non-English keyboard layouts.
+- The buttons for adding prototype cards and comments between prototypes are now always visible.
+- Optimized metadata collection: the file is now smaller and loads faster.
+- Fixed some bugs related to data cards automatically collapsing when edited.
+- You can now rearrange dictionary entries using drag and drop
 
 ## v1.1.16
 - `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu.
