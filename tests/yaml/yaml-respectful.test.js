@@ -713,6 +713,31 @@ test('!type:Foo tagged value on a dict pair parses onto value.commentBefore', ()
     assert.strictEqual(getFieldInlineComment(doc, 0, 'shape'), 'circle cmt');
 });
 
+// ── Issue #6: empty components block ─────────────────────────────────────────
+
+test('dumpYaml: entity with components:[] emits no components key', () => {
+    const proto = { type: 'entity', id: 'E', name: 'N', components: [] };
+    const out = dumpYaml([proto]);
+    assert.ok(!out.includes('components'), `dumpYaml emitted components for empty array: ${JSON.stringify(out)}`);
+});
+
+test('dumpYamlRespectful: removing last component drops the components key', () => {
+    const text = '- type: entity\n  id: E1\n  name: Test\n  components:\n  - type: Foo\n    x: 1\n';
+    const { protos, doc } = parseYamlDoc(text);
+    protos[0].components.splice(0, 1);
+    delete protos[0].components;
+    docDeleteField(doc, [0], 'components');
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assert.ok(!out.includes('components'), `respectful dump still has components: ${JSON.stringify(out)}`);
+    assert.ok(out.includes('id: E1'), 'proto identity preserved');
+});
+
+test('dumpYaml: entity without components key emits no components key', () => {
+    const proto = { type: 'entity', id: 'CEActionZLevelUp', name: 'Move up', description: 'Move up one Z-Level' };
+    const out = dumpYaml([proto]);
+    assert.ok(!out.includes('components'), `dumpYaml emitted unexpected components: ${JSON.stringify(out)}`);
+});
+
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

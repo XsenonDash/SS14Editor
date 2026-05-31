@@ -248,7 +248,12 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
             const fs = state.openFiles.get(filePath ?? state.currentFile);
             if (fs && fs.yaml[protoIdx]?.components) {
                 fs.yaml[protoIdx].components.splice(compIdx, 1);
-                if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                if (fs.yaml[protoIdx].components.length === 0) {
+                    delete fs.yaml[protoIdx].components;
+                    if (fs.doc) docDeleteField(fs.doc, [protoIdx], 'components');
+                } else {
+                    if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                }
                 fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
                 commitChange(fs); renderEditor();
             }
@@ -265,7 +270,12 @@ function compCard(compType, data, isInh, protoIdx, compIdx, inherited, ctx, file
                 const fs = state.openFiles.get(filePath ?? state.currentFile);
                 if (fs && fs.yaml[protoIdx]?.components) {
                     fs.yaml[protoIdx].components.splice(compIdx, 1);
-                    if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                    if (fs.yaml[protoIdx].components.length === 0) {
+                        delete fs.yaml[protoIdx].components;
+                        if (fs.doc) docDeleteField(fs.doc, [protoIdx], 'components');
+                    } else {
+                        if (fs.doc) docSetField(fs.doc, [protoIdx], 'components', fs.yaml[protoIdx].components);
+                    }
                     fs.dirtyProtos?.add(protoIdx); fs.dirtySinceSave?.add(protoIdx);
                     commitChange(fs); renderEditor();
                 }

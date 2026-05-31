@@ -1,5 +1,9 @@
 # Changelogs
 
+## v1.1.17
+- Fixed a bug where entity prototypes without components were created with incorrect serialization.
+- A bug has been fixed that prevented `Ctrl+Z` and `Ctrl+Y` from working on non-English keyboard layouts.
+
 ## v1.1.16
 - `Report a Bug` and `Request a New Feature` buttons have been added to the Help menu.
 - Fixed serialization errors when creating a prototype from scratch.

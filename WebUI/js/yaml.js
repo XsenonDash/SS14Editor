@@ -164,7 +164,11 @@ function _canonicalizeProto(proto) {
     const fieldOrder = _fieldOrderFor(metaProto);
     const ordered = _orderKeys(proto, fieldOrder, _PROTO_STRUCTURAL_HEAD);
     if (Array.isArray(ordered.components)) {
-        ordered.components = ordered.components.map(c => _canonicalizeComponent(c));
+        if (ordered.components.length === 0) {
+            delete ordered.components;
+        } else {
+            ordered.components = ordered.components.map(c => _canonicalizeComponent(c));
+        }
     }
     return ordered;
 }

@@ -55,7 +55,7 @@ function repaintGitDecorations() {
 
 // ======================== KEYBOARD =====================================
 document.addEventListener('keydown', e => {
-    if (e.ctrlKey && e.key === 's') {
+    if (e.ctrlKey && e.code === 'KeyS') {
         e.preventDefault();
         const fs = state.openFiles.get(state.currentFile);
         if (fs) {
@@ -73,10 +73,10 @@ document.addEventListener('keydown', e => {
     // Undo/Redo — always intercept at file level. This editor commits field
     // values atomically (not per-character), so file-level undo is more
     // meaningful than native per-character undo inside an input.
-    if (e.ctrlKey && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+    if (e.ctrlKey && !e.shiftKey && e.code === 'KeyZ') {
         e.preventDefault();
         undoFile();
-    } else if (e.ctrlKey && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+    } else if (e.ctrlKey && (e.code === 'KeyY' || (e.shiftKey && e.code === 'KeyZ'))) {
         e.preventDefault();
         redoFile();
     }
