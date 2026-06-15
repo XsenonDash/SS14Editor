@@ -3,8 +3,9 @@
  * step by step, through the same helpers the editor uses when the user
  * interacts with the UI.  Only at the very end are all invariants checked.
  *
- * After the build scenario the file also contains the full regression
- * suite absorbed from yaml-respectful.test.js.
+ * After the build scenario the file also contains the full comment /
+ * respectful-editing regression suite (this is the canonical home for it;
+ * the former yaml-respectful.test.js was a duplicate and has been removed).
  *
  * Run from repo root:
  *   node tests/yaml/potion-ultra.test.js
@@ -410,15 +411,22 @@ test('STEP 16 - component field commentBefore on map key (CEWeapon.animations, t
 // -- Final comparison against reference YAML ----------------------------------
 
 test('FINAL - output matches REFERENCE_YAML exactly', () => {
-    assert.strictEqual(
-        globalThis._potionFs.content.trim(),
-        REFERENCE_YAML.trim(),
-        'Serialized output does not match the reference YAML'
-    );
+    const got = globalThis._potionFs.content.trim();
+    const want = REFERENCE_YAML.trim();
+    if (got !== want) {
+        const g = got.split('\n'), w = want.split('\n');
+        for (let i = 0; i < Math.max(g.length, w.length); i++) {
+            if (g[i] !== w[i]) {
+                console.error(`  first diff @line ${i + 1}:\n    got : ${JSON.stringify(g[i])}\n    want: ${JSON.stringify(w[i])}`);
+                break;
+            }
+        }
+    }
+    assert.strictEqual(got, want, 'Serialized output does not match the reference YAML');
 });
 
 // ============================================================================
-//  REGRESSION SUITE (absorbed from yaml-respectful.test.js)
+//  REGRESSION SUITE — comment preservation & respectful editing
 // ============================================================================
 console.log('\n-- Regression suite -------------------------------------------------');
 
@@ -927,25 +935,29 @@ test('!type:Foo tagged value on a dict pair parses onto value.commentBefore', ()
 
 // -- Parent quoting edge cases ------------------------------------------------
 
-test('quoted parent in source is unquoted when proto is dirty', () => {
+// Respectful editing: an UNTOUCHED field keeps its original quoting when an
+// unrelated field in the same proto is edited. (These tests previously asserted
+// the opposite — that a dirty proto re-normalized every scalar's quoting — which
+// was the regression that made one-field edits rewrite the whole prototype.)
+test('quoted parent entries are preserved when an unrelated field is dirtied', () => {
     const text = `- type: entity\n  id: X\n  parent:\n  - "A"\n  - B\n  v: 1\n`;
     const { protos, doc } = parseYamlDoc(text);
     protos[0].v = 2;
     docSetField(doc, [0], 'v', 2);
     const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
-    assertNotContains(out, '"A"', 'quoted parent must be unquoted after dirty');
-    assertContains(out, '- A');
+    assertContains(out, '"A"', 'untouched quoted parent entry must keep its quotes');
     assertContains(out, '- B');
+    assertContains(out, 'v: 2');
 });
 
-test('single quoted scalar parent is unquoted after mutation', () => {
+test('quoted scalar parent is preserved when an unrelated field is mutated', () => {
     const text = `- type: entity\n  id: X\n  parent: "BaseMob"\n  v: 1\n`;
     const { protos, doc } = parseYamlDoc(text);
     protos[0].v = 2;
     docSetField(doc, [0], 'v', 2);
     const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
-    assertNotContains(out, '"BaseMob"');
-    assertContains(out, 'parent: BaseMob');
+    assertContains(out, 'parent: "BaseMob"', 'untouched quoted parent must keep its quotes (respectful)');
+    assertContains(out, 'v: 2');
 });
 
 test('hex color value remains quoted after parent edit', () => {
@@ -960,5 +972,30 @@ test('hex color value remains quoted after parent edit', () => {
 });
 
 // ============================================================================
+// -- Empty components block (ported from the former yaml-respectful.test.js) --
+
+test('dumpYaml: entity with components:[] emits no components key', () => {
+    const proto = { type: 'entity', id: 'E', name: 'N', components: [] };
+    const out = dumpYaml([proto]);
+    assert.ok(!out.includes('components'), `dumpYaml emitted components for empty array: ${JSON.stringify(out)}`);
+});
+
+test('dumpYamlRespectful: removing last component drops the components key', () => {
+    const text = '- type: entity\n  id: E1\n  name: Test\n  components:\n  - type: Foo\n    x: 1\n';
+    const { protos, doc } = parseYamlDoc(text);
+    protos[0].components.splice(0, 1);
+    delete protos[0].components;
+    docDeleteField(doc, [0], 'components');
+    const out = dumpYamlRespectful(protos, doc, text, new Set([0]));
+    assert.ok(!out.includes('components'), `respectful dump still has components: ${JSON.stringify(out)}`);
+    assert.ok(out.includes('id: E1'), 'proto identity preserved');
+});
+
+test('dumpYaml: entity without components key emits no components key', () => {
+    const proto = { type: 'entity', id: 'CEActionZLevelUp', name: 'Move up', description: 'Move up one Z-Level' };
+    const out = dumpYaml([proto]);
+    assert.ok(!out.includes('components'), `dumpYaml emitted unexpected components: ${JSON.stringify(out)}`);
+});
+
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

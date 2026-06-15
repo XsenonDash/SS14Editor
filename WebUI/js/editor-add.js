@@ -169,6 +169,7 @@ async function copyPrototype(type, sourceId, insertIdx) {
     const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
         ? insertIdx : fs.yaml.length;
     fs.yaml.splice(at, 0, clone);
+    fs.freshProtos?.add(clone); // session-new → canonicalize its field order
     fs.structuralChange = true;
     // Pre-expand the copied proto so it's not collapsed immediately after creation.
     fs._collapseState.protos[clone.id] = false;
@@ -197,7 +198,9 @@ function _addNewProto(fs, type, insertIdx) {
     // and dump as `parent: ''` until the user manually clears it.
     const at = (typeof insertIdx === 'number' && insertIdx >= 0 && insertIdx <= fs.yaml.length)
         ? insertIdx : fs.yaml.length;
-    fs.yaml.splice(at, 0, { type, id: 'NewPrototype' });
+    const proto = { type, id: 'NewPrototype' };
+    fs.yaml.splice(at, 0, proto);
+    fs.freshProtos?.add(proto); // session-new → canonicalize its field order
     fs.structuralChange = true;
     // Pre-expand the new proto so it's not collapsed immediately after creation.
     if (fs._collapseState) fs._collapseState.protos['NewPrototype'] = false;

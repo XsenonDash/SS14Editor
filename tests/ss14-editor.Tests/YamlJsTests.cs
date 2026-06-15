@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using Xunit;
@@ -6,18 +7,29 @@ using Xunit;
 namespace Content.Editor.Tests;
 
 /// <summary>
-/// Runs the JavaScript test suite for WebUI YAML helpers via Node.js.
-/// The actual assertions live in tests/yaml/yaml-respectful.test.js;
-/// this class is just the xUnit entry-point so that `dotnet test` covers
-/// JS behaviour automatically.
+/// Runs the JavaScript test suites for WebUI YAML helpers via Node.js.
+/// The actual assertions live in tests/yaml/*.test.js (the from-scratch build
+/// + comment/respectful suite in potion-ultra.test.js and the bug regression
+/// guards in regression-respectful.test.js). This class is just the xUnit
+/// entry-point so `dotnet test` covers JS behaviour automatically. Every
+/// *.test.js under tests/yaml is discovered, so new suites are picked up
+/// without touching this file.
 /// </summary>
 public class YamlJsTests
 {
-    [Fact]
-    public void YamlRespectful_AllCommentStylesPreserved()
+    public static IEnumerable<object[]> JsTestFiles()
+    {
+        var dir = Path.Combine(FindRepoRoot(), "tests", "yaml");
+        foreach (var f in Directory.GetFiles(dir, "*.test.js"))
+            yield return new object[] { Path.GetFileName(f) };
+    }
+
+    [Theory]
+    [MemberData(nameof(JsTestFiles))]
+    public void JsSuitePasses(string fileName)
     {
         var repoRoot   = FindRepoRoot();
-        var scriptPath = Path.Combine(repoRoot, "tests", "yaml", "yaml-respectful.test.js");
+        var scriptPath = Path.Combine(repoRoot, "tests", "yaml", fileName);
 
         using var proc = Process.Start(new ProcessStartInfo
         {
@@ -35,7 +47,7 @@ public class YamlJsTests
 
         var output = (stdout + "\n" + stderr).Trim();
         Assert.True(proc.ExitCode == 0,
-            $"JS tests failed (exit {proc.ExitCode}):\n{output}");
+            $"JS tests failed in {fileName} (exit {proc.ExitCode}):\n{output}");
     }
 
     private static string FindRepoRoot()

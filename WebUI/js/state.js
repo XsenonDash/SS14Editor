@@ -33,6 +33,13 @@ class FileState {
         this._saveTimer     = null;
         this.dirtyProtos    = new Set();
         this.dirtySinceSave = new Set();
+        // Protos created in THIS session (addNewProto / copyPrototype). They
+        // have no on-disk formatting to respect, so their fields are
+        // canonicalized (sorted to the metadata layout) on every re-dump.
+        // Protos loaded from disk are absent here → their field order is
+        // preserved verbatim (respectful editing). Keyed by object identity,
+        // which survives across commits (commitChange never rebuilds fs.yaml).
+        this.freshProtos    = new WeakSet();
         this._undoStack          = [];   // string[] — past content snapshots
         this._redoStack          = [];   // string[] — future content snapshots
         this._lastSnapshotTime   = 0;    // ms timestamp of last pushed snapshot

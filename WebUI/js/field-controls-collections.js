@@ -8,6 +8,31 @@
 
 'use strict';
 
+// Concrete polymorphic types that the engine can deserialize WITHOUT an
+// explicit `!type:` tag, because a custom ITypeReader infers them from their
+// fields. Currently only EntSelector (EntityTableSelector's
+// EntityTableTypeSerializer reads a bare `- id: Foo` mapping as an EntSelector).
+// Every OTHER polymorphic type — conditions, effects, events, etc. — is an
+// ImplicitDataDefinitionForInheritors with NO custom serializer and therefore
+// REQUIRES its `!type:` tag. Do not widen this set without confirming a real
+// custom TypeSerializer exists for the type, or saved YAML will silently drop
+// the tag and fail to load in-game.
+const SHORTHAND_TYPES = new Set(['EntSelector']);
+
+// True when `fullName` (a concrete polymorphic implementor of `elemFullType`)
+// may be written as a tag-less shorthand mapping. Requires BOTH that the type
+// is in SHORTHAND_TYPES and that its required fields uniquely identify it among
+// the base's implementors (so the engine's reader can infer it back).
+// Extracted as a pure helper so the gate is unit-testable.
+function _canUseShorthand(elemFullType, fullName) {
+    if (!SHORTHAND_TYPES.has(fullName.split('.').pop())) return false;
+    const typeMeta = state.metadata?.dataDefinitions?.[fullName];
+    const reqTags = (typeMeta?.fields || [])
+        .filter(f => f.required && !f.isId && !f.isParent)
+        .map(f => f.tag);
+    return reqTags.length > 0 && _inferConcreteType(elemFullType, reqTags) === fullName;
+}
+
 // ======================== POLYMORPHIC TYPE PICKER ======================
 //  Searchable floating popup for choosing a concrete `!type:` from the
 //  list of implementors of a polymorphic DataDefinition base. Behaves
@@ -212,15 +237,12 @@ function listCtrl(val, meta, dis, onChange) {
                     e.stopPropagation();
                     showSearchableTypePicker(addBtn, impls, null, fullName => {
                         if (!fullName) return;
-                        // If this type can be identified solely by its required
-                        // fields (like EntSelector via `id:`), create it as a
-                        // tag-less shorthand so it matches the canonical YAML form
-                        // used by the engine's custom TypeSerializer.
-                        const typeMeta = state.metadata?.dataDefinitions?.[fullName];
-                        const reqFields = (typeMeta?.fields || []).filter(f => f.required && !f.isId && !f.isParent);
-                        const reqTags = reqFields.map(f => f.tag);
-                        const canShorthand = reqTags.length > 0 && _inferConcreteType(elemFullType, reqTags) === fullName;
-                        if (canShorthand) {
+                        // Only a whitelisted type with a custom ITypeReader
+                        // (EntSelector) may be written tag-less; everything else
+                        // keeps its `!type:` tag or the engine can't load it.
+                        if (_canUseShorthand(elemFullType, fullName)) {
+                            const reqFields = (state.metadata?.dataDefinitions?.[fullName]?.fields || [])
+                                .filter(f => f.required && !f.isId && !f.isParent);
                             const shorthand = {};
                             for (const f of reqFields) shorthand[f.tag] = defaultValueForMeta(f);
                             arr.push(shorthand);
@@ -569,7 +591,11 @@ function dataDefCtrl(val, ddType, dis, onChange) {
         const keys = Object.keys(obj).filter(k => !k.startsWith('__'));
         if (keys.length > 0) {
             const inferred = _inferConcreteType(ddType, keys);
-            if (inferred) effectiveType = inferred;
+            // Only resolve a tag-less object to a concrete type when that type
+            // is a real shorthand type (EntSelector). Otherwise a tag-less
+            // mapping is treated as the base — consistent with how it now saves
+            // (always tagged), so rendering and serialization can't disagree.
+            if (inferred && SHORTHAND_TYPES.has(inferred.split('.').pop())) effectiveType = inferred;
         }
     }
 

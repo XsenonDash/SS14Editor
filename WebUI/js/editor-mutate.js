@@ -73,7 +73,16 @@ function commitChange(fs) {
     let nc;
     if (fs.doc && fs.dirtyProtos?.size > 0 &&
         fs.yaml.length === fs.doc.contents?.items?.length) {
-        nc = dumpYamlRespectful(fs.yaml, fs.doc, fs.content, fs.dirtyProtos);
+        // Canonicalize (sort fields) only for protos created this session;
+        // loaded protos keep their on-disk field order (respectful editing).
+        let canonIdx = null;
+        if (fs.freshProtos) {
+            canonIdx = new Set();
+            for (const i of fs.dirtyProtos) {
+                if (fs.freshProtos.has(fs.yaml[i])) canonIdx.add(i);
+            }
+        }
+        nc = dumpYamlRespectful(fs.yaml, fs.doc, fs.content, fs.dirtyProtos, canonIdx);
     } else if (fs.structuralChange && fs.doc && YAML.isSeq(fs.doc.contents)) {
         nc = dumpYamlRespectfulStructural(fs.yaml, fs.content, fs.doc, fs.protoAstRefs);
     } else {

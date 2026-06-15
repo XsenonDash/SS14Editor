@@ -27,7 +27,7 @@ jobs:
         run: dotnet restore tests/ss14-editor.Tests/ss14-editor.Tests.csproj
 
       - name: Test (JS yaml helpers)
-        run: node tests/yaml/potion-ultra.test.js
+        run: for f in tests/yaml/*.test.js; do echo "== $f =="; node "$f" || exit 1; done
 
       - name: Test (.NET)
         run: dotnet test tests/ss14-editor.Tests/ss14-editor.Tests.csproj --nologo --verbosity normal

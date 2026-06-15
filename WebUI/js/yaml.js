@@ -36,6 +36,23 @@ function _nodeToJs(node) {
 // ──────────────────────────────────────────────────────────────────────
 //  JS → AST  (respects __yamlTag → !type:Foo tags)
 // ──────────────────────────────────────────────────────────────────────
+
+// A JS object key is always a string, but YAML integer-dictionary keys (e.g.
+// the `events:` map keyed by tick number) must be emitted UNQUOTED. eemeli
+// quotes any numeric-looking string scalar ("1") to preserve its string type,
+// so an integer key built from a JS string comes out as `"1":`. Detect a
+// canonical integer key so it can instead be written as a numeric scalar.
+function _isIntKey(k) {
+    return typeof k === 'string' && /^-?\d+$/.test(k)
+        && Number.isSafeInteger(Number(k)) && String(Number(k)) === k;
+}
+// Build a Map key node for JS string key `k`. When `asNumber` is set (the map's
+// keys are integer-valued) an integer-like key is emitted as a numeric scalar
+// → `1:` rather than the quoted `"1":`.
+function _mapKeyNode(k, doc, asNumber) {
+    return doc.createNode(asNumber && _isIntKey(k) ? Number(k) : k);
+}
+
 function _jsToNode(val, doc) {
     if (val === null || val === undefined) {
         return doc.createNode(null);
@@ -54,15 +71,18 @@ function _jsToNode(val, doc) {
     if (tag && keys.length === 0) {
         // Parameterless polymorphic item → bare tagged scalar (`!type:Foo`).
         // Parsed bare tags have value="" + type=PLAIN; match that exactly so
-        // _normalizeScalarStyles never re-quotes the empty-string value.
+        // the empty-string value is never re-quoted as "".
         const scalar = doc.createNode('');
         scalar.type = 'PLAIN';
         scalar.tag = tag;
         return scalar;
     }
     const map = doc.createNode({});
+    // When every key is an integer (e.g. a Dictionary<int, …> like `events:`),
+    // emit them as numeric scalars so they stay unquoted.
+    const numericKeys = keys.length > 0 && keys.every(_isIntKey);
     map.items = keys.map(k =>
-        new YAML.Pair(doc.createNode(k), _jsToNode(val[k], doc))
+        new YAML.Pair(_mapKeyNode(k, doc, numericKeys), _jsToNode(val[k], doc))
     );
     if (tag) map.tag = tag;
     return map;
@@ -262,7 +282,7 @@ function dumpYaml(data) {
  * VALUE node AFTER the '- ' indicator.  We scan back to include the '- '
  * so gaps contain only blank lines and clean items include their '- '.
  */
-function dumpYamlRespectful(yamlArray, doc, originalText, dirtyIndices) {
+function dumpYamlRespectful(yamlArray, doc, originalText, dirtyIndices, canonicalizeIndices) {
     if (!doc || !YAML.isSeq(doc.contents) ||
         yamlArray.length !== doc.contents.items.length) {
         return dumpYaml(yamlArray);
@@ -282,14 +302,20 @@ function dumpYamlRespectful(yamlArray, doc, originalText, dirtyIndices) {
         // (blank lines, inter-item comments, leading file comments, etc.)
         parts.push(originalText.slice(pos, itemStart));
         if (dirtyIndices.has(i)) {
-            // Normalize scalar styles before serializing so that scalars
-            // that were quoted in the source (e.g. parent: "BaseMob") are
-            // re-emitted without unnecessary quotes after any edit.
-            _normalizeScalarStyles(items[i]);
             // Serialize from the (mutated) AST node so internal comments
             // (commentBefore on child nodes) are preserved even when field
             // values were changed via docSetField / docDeleteField.
-            parts.push(_dumpSingleProtoFromNode(items[i]));
+            //
+            // Respectful editing: do NOT canonicalize (re-sort fields) or
+            // globally normalize scalar styles here. In-place AST patching
+            // already keeps untouched fields, their order, and their original
+            // quoting intact; only a value that actually changed has its style
+            // reset (see _patchAstNode). Re-sorting / re-quoting every edit is
+            // what caused single-field edits to rewrite the whole prototype.
+            // Exception: session-new protos (canonicalizeIndices) have no
+            // on-disk order to respect, so they ARE sorted to the metadata layout.
+            const canon = canonicalizeIndices ? canonicalizeIndices.has(i) : false;
+            parts.push(_dumpSingleProtoFromNode(items[i], canon));
         } else {
             // Slice from '-' to nodeEnd (inclusive of trailing newline)
             parts.push(originalText.slice(itemStart, nodeEnd));
@@ -317,35 +343,6 @@ function _forceBlockStyle(node) {
     } else if (YAML.isMap(node)) {
         for (const pair of node.items) {
             if (YAML.isPair(pair)) _forceBlockStyle(pair.value);
-        }
-    }
-}
-
-/**
- * Recursively clear the `style` property on all Scalar nodes so that
- * eemeli/yaml re-determines the quoting style from the value.
- * Applied to dirty proto AST nodes before serialization to ensure that
- * scalars originally quoted in the source (e.g. parent: "BaseMob") are
- * not preserved with unnecessary quotes.
- * Values that genuinely require quoting (e.g. "true", "#ff0000") will
- * be re-quoted automatically by the serializer.
- */
-function _normalizeScalarStyles(node) {
-    if (!node || typeof node !== 'object') return;
-    if (YAML.isScalar(node)) {
-        // Bare-tag scalars (empty value + custom tag, e.g. !type:Delete) must
-        // keep PLAIN type — clearing it causes eemeli/yaml to re-quote the
-        // empty string as "" instead of leaving it as a bare tag.
-        if (!(node.value === '' && node.tag)) node.type = undefined;
-        return;
-    }
-    if (YAML.isSeq(node)) { for (const item of node.items) _normalizeScalarStyles(item); }
-    else if (YAML.isMap(node)) {
-        for (const pair of node.items) {
-            if (YAML.isPair(pair)) {
-                _normalizeScalarStyles(pair.key);
-                _normalizeScalarStyles(pair.value);
-            }
         }
     }
 }
@@ -403,8 +400,11 @@ function _sortAstProtoNode(protoNode) {
     }
 }
 
-function _dumpSingleProtoFromNode(node) {
-    _sortAstProtoNode(node);
+function _dumpSingleProtoFromNode(node, canonicalize = true) {
+    // canonicalize=false for respectful edits of existing protos: preserve the
+    // on-disk field order untouched. canonicalize=true (full rewrites / new
+    // protos) sorts fields to match the redactor's visual layout.
+    if (canonicalize) _sortAstProtoNode(node);
     _forceBlockStyle(node);
     const origSpace   = node.spaceBefore;
     const origComment = node.commentBefore;
@@ -615,28 +615,43 @@ function _patchAstNode(astNode, jsValue, doc) {
         const jsKeys = Object.keys(jsValue).filter(k => !k.startsWith('__'));
         const jsKeySet = new Set(jsKeys);
 
-        // Delete keys absent from the new value.
-        const existingKeys = astNode.items.map(p => p.key?.value).filter(k => typeof k === 'string');
-        for (const k of existingKeys) {
-            if (!jsKeySet.has(k)) astNode.delete(k);
+        // Reconcile by the STRING value of each key scalar — NOT by JS key
+        // identity/type. Integer keys parse as numeric scalars (`0`), so
+        // astNode.get/set/delete("0") never matches them; the old code dropped
+        // them from the delete pass and appended a duplicate quoted `"0":`.
+        const keyStr = p => {
+            const kv = YAML.isScalar(p.key) ? p.key.value : p.key;
+            return kv == null ? '' : String(kv);
+        };
+        // Delete pairs whose key is absent from the new value.
+        for (let i = astNode.items.length - 1; i >= 0; i--) {
+            if (!jsKeySet.has(keyStr(astNode.items[i]))) astNode.items.splice(i, 1);
         }
+        // Integer-valued map? → new keys are emitted unquoted (`1:` not `"1":`).
+        const numericKeys = jsKeys.length > 0 && jsKeys.every(_isIntKey);
 
         for (const k of jsKeys) {
-            const childNode = astNode.get(k, true); // keepScalar → raw AST node
+            const pair = astNode.items.find(p => keyStr(p) === k);
+            const childNode = pair ? pair.value : undefined;
             const jsVal = jsValue[k];
             const jsIsObj = jsVal !== null && typeof jsVal === 'object' && !Array.isArray(jsVal);
             const jsIsArr = Array.isArray(jsVal);
             if (childNode !== undefined) {
-                if (YAML.isScalar(childNode) && !jsIsObj && !jsIsArr) { childNode.value = jsVal; continue; }
+                if (YAML.isScalar(childNode) && !jsIsObj && !jsIsArr) {
+                    if (childNode.value !== jsVal) childNode.type = undefined; // re-quote only on change
+                    childNode.value = jsVal; continue;
+                }
                 // For Map children, only patch in-place when the YAML tag matches;
                 // a tag change means a type change → full replacement preserves correctness.
                 if (YAML.isMap(childNode) && jsIsObj && childNode.tag === _expectedTag(jsVal)) {
                     _patchAstNode(childNode, jsVal, doc); continue;
                 }
                 if (YAML.isSeq(childNode) && jsIsArr) { _patchAstNode(childNode, jsVal, doc); continue; }
+                // Structural / YAML-tag mismatch: replace this pair's value in place.
+                pair.value = _jsToNode(jsVal, doc); continue;
             }
-            // Missing key, structural mismatch, or YAML-tag mismatch: full replacement.
-            astNode.set(k, _jsToNode(jsVal, doc));
+            // New key: append a pair with a correctly-typed (unquoted-int) key node.
+            astNode.items.push(new YAML.Pair(_mapKeyNode(k, doc, numericKeys), _jsToNode(jsVal, doc)));
         }
         return;
     }
@@ -750,7 +765,7 @@ function dumpYamlMergeDisk(editorYaml, editorDoc, diskContent, diskDoc, dirtySin
         const itemStart = _seqEntryStart(diskContent, nodeStart);
         parts.push(diskContent.slice(pos, itemStart));
         if (dirtySinceSave.has(i)) {
-            parts.push(_dumpSingleProtoFromNode(editorItems[i]));
+            parts.push(_dumpSingleProtoFromNode(editorItems[i], false));
         } else {
             parts.push(diskContent.slice(itemStart, nodeEnd));
         }

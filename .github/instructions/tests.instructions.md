@@ -27,11 +27,13 @@ Create a matching `XxxTests.cs` in this folder. The mapping is enforced by the f
 ## WebUI / JavaScript tests
 Pure JS functions in `WebUI/js/` cannot be tested from C#. The pattern is:
 1. Write the assertions in a plain Node.js script under `tests/yaml/` (no npm, uses `yaml-lib.js` bundle + `vm.runInNewContext`).
-2. Add a thin C# `[Fact]` in `YamlJsTests.cs` that shells out to `node <script>` and asserts exit code 0.
+2. Drop the script under `tests/yaml/` as `*.test.js`; `YamlJsTests.cs` auto-discovers every such file and runs it via `node`, asserting exit code 0 (no per-file C# edit needed).
 
 This keeps JS test logic in JS while `dotnet test` covers everything automatically.  
 Node.js must be available — CI installs it via `actions/setup-node@v4` (see [tests.yml](../../.github/workflows/tests.yml)).  
-Existing JS test: [tests/yaml/yaml-respectful.test.js](../../tests/yaml/yaml-respectful.test.js) — all comment styles preserved by `dumpYamlRespectful`.
+Existing JS suites:
+- [tests/yaml/potion-ultra.test.js](../../tests/yaml/potion-ultra.test.js) — end-to-end editor build + all comment/respectful styles preserved by `dumpYamlRespectful`.
+- [tests/yaml/regression-respectful.test.js](../../tests/yaml/regression-respectful.test.js) — minimal-diff edits, `!type:` shorthand gate, integer-keyed maps.
 
 ## What this project does **not** test
 - `MetadataLoadContext`-loaded game assemblies — requires a built SS14 fork. Avoid in unit tests; cover via integration scripts.
