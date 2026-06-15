@@ -1,5 +1,10 @@
 # Changelogs
 
+## v1.1.18
+- Fixed a bug that caused the entire file to be overwritten when editing a single field.
+- Fixed a bug that caused some !type types to lack a header.
+- Fixed some issues with string serialization.
+
 ## v1.1.17
 - Fixed a bug where entity prototypes without components were created with incorrect serialization.
 - A bug has been fixed that prevented `Ctrl+Z` and `Ctrl+Y` from working on non-English keyboard layouts.
